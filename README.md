@@ -1,6 +1,6 @@
 # Saarthi - University Recommender AI
 
-**Saarthi** (सारथी - "Guide") is an intelligent, Ontario-focused university and program recommendation system that leverages web scraping and AI-driven conversation to provide tailored guidance for students on their educational journey.
+**Saarthi** (सारथी - "Charioteer/Guide") is an intelligent, Ontario-focused university and program recommendation system that leverages web scraping and AI-driven conversation to provide tailored guidance for students on their educational journey.
 
 ## Features
 
