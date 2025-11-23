@@ -1,10 +1,10 @@
-# university-recommender-ai
+# Saarthi - University Recommender AI
 
-**university-recommender-ai** is an intelligent, Ontario-focused university and program recommendation system that leverages web scraping and AI-driven conversation to provide tailored guidance for students.
+**Saarthi** (सारथी - "Guide") is an intelligent, Ontario-focused university and program recommendation system that leverages web scraping and AI-driven conversation to provide tailored guidance for students on their educational journey.
 
 ## Features
 
-The core Jupyter Notebook performs the following:
+Saarthi performs the following:
 
 - **Collects user academic and interest information** (subjects, grade, location, overall average, future goals)
 - **Scrapes university program listings and details** from OUInfo (Ontario Universities' Info) and other sources
@@ -19,7 +19,7 @@ The core Jupyter Notebook performs the following:
 
 ## Use Case
 
-This project is ideal for students seeking detailed, actionable guidance on Ontario university choices, with an emphasis on STEM and technology fields. It features robust scraping logic and AI customization for truly personalized university recommendations.
+Saarthi is ideal for students seeking detailed, actionable guidance on Ontario university choices, with an emphasis on STEM and technology fields. It features robust scraping logic and AI customization for truly personalized university recommendations.
 
 ## Technologies Used
 
