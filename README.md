@@ -1,29 +1,32 @@
-# Saarthi - University Recommender AI
+# 🏹 Saarthi (The Guide)
 
-**Saarthi** (सारथी - "Charioteer/Guide") is an intelligent, Ontario-focused university and program recommendation system that leverages web scraping and AI-driven conversation to provide tailored guidance for students on their educational journey.
+**An AI-Powered University PathFinder for Ontario Students**
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![AI](https://img.shields.io/badge/AI-Google_Gemini-orange)
+![UI](https://img.shields.io/badge/UI-Gradio-purple)
+![Status](https://img.shields.io/badge/Status-Prototype-green)
 
-Saarthi performs the following:
+## 📖 Overview
 
-- **Collects user academic and interest information** (subjects, grade, location, overall average, future goals)
-- **Scrapes university program listings and details** from OUInfo (Ontario Universities' Info) and other sources
-- **Extracts prerequisites, admission averages, program details** using flexible HTML parsing
-- **Identifies and ranks programs relevant to the student's interests** (e.g., robotics, engineering, automation)
-- **Generates personalized recommendations** outlining:
-  - The most relevant programs and universities
-  - Required prerequisites and high school courses
-  - Typical admission averages
-  - Suggested personal projects and activities to strengthen applications
-- **Uses a conversational AI model (e.g., Gemini/GPT) to interactively present insights and advice**
+**Saarthi** (meaning "Charioteer" or "Guide" in Sanskrit) is an intelligent chatbot designed to help high school students navigate the complex landscape of university applications in Ontario. 
 
-## Use Case
+Unlike standard search tools, Saarthi uses **live web scraping** combined with **Generative AI** to understand a student's unique profile (grades, interests, location) and match them with real-time program data from [OUInfo](https://www.ouinfo.ca).
 
-Saarthi is ideal for students seeking detailed, actionable guidance on Ontario university choices, with an emphasis on STEM and technology fields. It features robust scraping logic and AI customization for truly personalized university recommendations.
+## ✨ Key Features
 
-## Technologies Used
+* **Real-Time Data:** Scrapes up-to-date program requirements, prerequisites, and admission averages directly from Ontario Universities' Info.
+* **Deep-Dive Analysis:** (Optional) Can visit external university websites to gather specific details on labs, co-ops, and professors.
+* **Context-Aware AI:** Uses Google's **Gemini 2.5 Flash** model to synthesize scraped data into personalized advice.
+* **Interactive UI:** Built with **Gradio** for a clean, user-friendly chat interface.
+* **Smart Caching:** (Planned) Caches scraped data to reduce latency and server load.
 
-- Python
-- Web scraping (BeautifulSoup, requests)
-- AI/ML models for conversational recommendations
-- Jupyter Notebook for interactive exploration
+## ⚙️ How It Works
+
+
+
+1.  **User Input:** The student provides their grades, interests (e.g., "Robotics"), and location.
+2.  **Scraping Engine:** The bot searches OUInfo for programs matching the interests.
+3.  **Data Extraction:** It extracts critical data: Prerequisites, Admission Averages, and Program URLs.
+4.  **AI Synthesis:** The raw data is fed into the Gemini LLM with a custom prompt.
+5.  **Response:** The AI acts as a guidance counselor, ranking universities and suggesting high school courses.
