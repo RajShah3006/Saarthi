@@ -11,18 +11,17 @@
 
     <style>
         :root {
-            --primary: #6366f1;
-            --accent: #ec4899;
-            --bg: #020617;
-            --glass: rgba(30, 41, 59, 0.4);
-            --border: rgba(255, 255, 255, 0.08);
+            --primary: #818cf8;
+            --accent: #c084fc;
+            --bg: #02040a; /* Ultra-Deep Space Black */
+            --glass: rgba(15, 23, 42, 0.6);
+            --border: rgba(255, 255, 255, 0.1);
         }
 
-        /* --- 1. CUSTOM SCROLLBAR (Crucial for Dark Mode) --- */
+        /* --- 1. CUSTOM SCROLLBAR --- */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
         /* --- 2. BASE STYLES --- */
         body {
@@ -35,74 +34,105 @@
             align-items: center;
             min-height: 100vh;
             overflow-x: hidden;
-            selection-background-color: rgba(99, 102, 241, 0.3);
         }
 
-        /* --- 3. BACKGROUND TEXTURES --- */
-        .bg-grid {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: linear-gradient(var(--border) 1px, transparent 1px),
-            linear-gradient(90deg, var(--border) 1px, transparent 1px);
-            background-size: 40px 40px;
-            opacity: 0.15;
+        /* --- 3. SPACE BACKGROUND EFFECTS --- */
+        
+        /* The "Stars" */
+        .stars {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 50px 160px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1.5px 1.5px at 90px 40px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 130px 80px, #ffffff, rgba(0,0,0,0));
+            background-size: 200px 200px;
+            opacity: 0.3;
+            z-index: -3;
+            animation: twinkle 5s infinite alternate;
+        }
+
+        /* The "Space Grid" */
+        .space-grid {
+            position: fixed;
+            width: 200%; height: 200%;
+            top: -50%; left: -50%;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.15) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform: perspective(500px) rotateX(60deg); /* 3D Tilted Floor Effect */
+            animation: grid-move 20s linear infinite;
             z-index: -2;
-            mask-image: linear-gradient(to bottom, transparent 5%, black 40%, black 70%, transparent 95%);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 90%);
         }
 
-        .bg-glow {
+        /* Ambient Nebula Glow */
+        .nebula-glow {
             position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 120vw; height: 120vw;
-            background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, rgba(0,0,0,0) 60%);
+            width: 100vw; height: 100vw;
+            background: radial-gradient(circle, rgba(79, 70, 229, 0.15) 0%, rgba(0,0,0,0) 60%);
             z-index: -1;
             pointer-events: none;
+        }
+
+        @keyframes grid-move {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(60px); }
+        }
+        
+        @keyframes twinkle {
+            0% { opacity: 0.3; }
+            100% { opacity: 0.5; }
         }
 
         /* --- 4. HEADER --- */
         header {
             text-align: center;
-            padding: 80px 20px 50px;
+            padding: 100px 20px 60px;
             z-index: 10;
         }
 
         .badge {
             display: inline-block;
-            padding: 6px 12px;
+            padding: 6px 16px;
             border-radius: 20px;
             background: rgba(99, 102, 241, 0.1);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #a5b4fc;
-            font-size: 0.8rem;
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: #c7d2fe;
+            font-size: 0.85rem;
             font-weight: 600;
-            margin-bottom: 20px;
-            text-transform: uppercase;
+            margin-bottom: 25px;
             letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
         }
 
         h1 {
             font-family: 'Outfit', sans-serif;
-            font-size: 5rem;
+            font-size: 5.5rem;
             margin: 0;
-            line-height: 1.1;
-            background: linear-gradient(to bottom right, #ffffff, #94a3b8);
+            line-height: 1;
+            background: linear-gradient(to bottom, #ffffff 40%, #6366f1 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -0.03em;
+            filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.4));
         }
 
         .subtitle {
             font-size: 1.25rem;
             color: #94a3b8;
-            margin-top: 20px;
+            margin-top: 25px;
             font-weight: 400;
-            height: 30px; /* Fixed height for typewriter */
         }
 
         .typewriter-text {
-            color: #818cf8;
+            color: #c084fc;
             font-family: 'JetBrains Mono', monospace;
-            font-weight: 600;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(192, 132, 252, 0.5);
         }
 
         /* --- 5. GLASS CONTAINER --- */
@@ -113,29 +143,15 @@
             background: var(--glass);
             border: 1px solid var(--border);
             border-radius: 24px;
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 20px 50px -10px rgba(0,0,0,0.5);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 20px 50px -10px rgba(0,0,0,0.6);
             overflow: hidden;
             margin-bottom: 60px;
             position: relative;
-            transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
-        /* Cool glowing border animation */
-        .glass-frame::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
-            opacity: 0.5;
-        }
-
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
+        iframe { width: 100%; height: 100%; border: none; }
 
         /* --- FOOTER --- */
         footer {
@@ -146,9 +162,10 @@
             text-align: center;
             width: 100%;
             border-top: 1px solid var(--border);
+            background: #02040a;
         }
 
-        footer a { color: #64748b; text-decoration: none; transition: 0.2s; }
+        footer a { color: #64748b; text-decoration: none; }
         footer a:hover { color: #94a3b8; }
 
         /* --- RESPONSIVE --- */
@@ -160,11 +177,12 @@
 </head>
 <body>
 
-    <div class="bg-grid"></div>
-    <div class="bg-glow"></div>
+    <div class="stars"></div>
+    <div class="space-grid"></div>
+    <div class="nebula-glow"></div>
 
     <header>
-        <div class="badge">✨ New: 2025 Course Data Updated</div>
+        <div class="badge">🚀 Live: 2025 University Data</div>
         <h1>Saarthi AI</h1>
         <div class="subtitle">
             Your personal guide for <span class="typewriter-text" id="typing"></span>
@@ -172,14 +190,15 @@
     </header>
 
     <div class="glass-frame">
-        <iframe src="https://rajshah13-saarthi.hf.space"></iframe>
+        <iframe src="https://YOUR-USERNAME-saarthi-backend.hf.space"></iframe>
     </div>
 
     <footer>
-        <p>Built by Raj Shah for Ontario Students • <a href="#">GitHub</a> • <a href="#">Contact</a></p>
+        <p>Built by Raj Shah for Ontario Students • <a href="#">GitHub</a></p>
     </footer>
 
     <script>
+        // Typewriter Effect
         const textElement = document.getElementById('typing');
         const phrases = ["Engineering.", "Computer Science.", "Health Sciences.", "Business.", "Your Future."];
         let phraseIndex = 0;
@@ -188,7 +207,6 @@
 
         function type() {
             const currentPhrase = phrases[phraseIndex];
-            
             if (isDeleting) {
                 textElement.textContent = currentPhrase.substring(0, charIndex - 1);
                 charIndex--;
@@ -196,19 +214,17 @@
                 textElement.textContent = currentPhrase.substring(0, charIndex + 1);
                 charIndex++;
             }
-
             if (!isDeleting && charIndex === currentPhrase.length) {
                 isDeleting = true;
-                setTimeout(type, 2000); // Wait before deleting
+                setTimeout(type, 2000);
             } else if (isDeleting && charIndex === 0) {
                 isDeleting = false;
                 phraseIndex = (phraseIndex + 1) % phrases.length;
-                setTimeout(type, 500); // Wait before typing next
+                setTimeout(type, 500);
             } else {
                 setTimeout(type, isDeleting ? 50 : 100);
             }
         }
-
         document.addEventListener('DOMContentLoaded', type);
     </script>
 
