@@ -3,285 +3,274 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saarthi AI | Native Crystal</title>
+    <title>Saarthi AI | Your Personal Guide</title>
     
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@700;800&family=Space+Grotesk:wght@300;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            --bg: #020617;
-            --glass: rgba(30, 41, 59, 0.4);
-            --border: rgba(255, 255, 255, 0.1);
-            --neon: #818cf8;
+            --bg-color: #050505;
+            --glass-surface: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-highlight: rgba(255, 255, 255, 0.15);
+            --primary-swirl: #6366f1;
+            --secondary-swirl: #a855f7;
+            --tertiary-swirl: #ec4899;
         }
 
+        /* --- 1. RESET & BASE --- */
         body {
-            margin: 0; font-family: 'Inter', sans-serif;
-            background: var(--bg); color: white;
-            display: flex; flex-direction: column; align-items: center;
-            min-height: 100vh; overflow-x: hidden;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
-        /* --- BACKGROUND ANIMATION --- */
-        .orb {
-            position: fixed; width: 60vw; height: 60vw;
-            background: radial-gradient(circle, #6366f1 0%, transparent 70%);
-            filter: blur(100px); opacity: 0.3; z-index: -1;
-            animation: float 10s infinite alternate;
-        }
-        @keyframes float { from { transform: translate(-20%, -20%); } to { transform: translate(0, 0); } }
-
-        /* --- LAYOUT GRID --- */
-        .container {
-            display: grid;
-            grid-template-columns: 1fr 2fr; /* 1/3 Inputs, 2/3 Chat */
-            gap: 30px;
-            width: 90%; max-width: 1400px;
-            margin-top: 40px;
-            height: 80vh;
+        /* --- 2. THE SWIRLS (Background Magic) --- */
+        .swirl-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            overflow: hidden;
+            background: #000;
         }
 
-        /* --- THE GLASS BOXES --- */
-        .glass-box {
-            background: var(--glass);
-            border: 1px solid var(--border);
-            border-radius: 24px;
+        .swirl-1 {
+            position: absolute;
+            top: -20%; left: -20%;
+            width: 80vw; height: 80vw;
+            background: conic-gradient(from 0deg, 
+                var(--primary-swirl), 
+                transparent 40%, 
+                var(--secondary-swirl), 
+                transparent 70%, 
+                var(--primary-swirl));
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: spin 20s linear infinite;
+            border-radius: 40%;
+        }
+
+        .swirl-2 {
+            position: absolute;
+            bottom: -10%; right: -10%;
+            width: 60vw; height: 60vw;
+            background: radial-gradient(circle, var(--tertiary-swirl), transparent 70%);
+            filter: blur(100px);
+            opacity: 0.3;
+            animation: breathe 8s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); opacity: 0.3; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+        }
+
+        /* --- 3. GLASS UTILITY CLASS --- */
+        .glass-panel {
+            background: var(--glass-surface);
             backdrop-filter: blur(20px);
-            padding: 30px;
-            display: flex; flex-direction: column; gap: 20px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            overflow-y: auto;
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border-top: 1px solid var(--glass-highlight);
+            border-left: 1px solid var(--glass-highlight);
         }
 
-        /* --- BOX 1: INPUTS --- */
-        h2 { font-family: 'Outfit', sans-serif; margin: 0 0 10px 0; color: #e2e8f0; }
-        
-        label { font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; display: block; }
-        
-        input, select {
-            width: 100%; padding: 12px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            color: white; font-family: inherit;
-            box-sizing: border-box; /* Fix padding issues */
-        }
-        input:focus, select:focus { outline: 2px solid var(--neon); border-color: transparent; }
-
-        button#generate-btn {
-            background: linear-gradient(90deg, #6366f1, #8b5cf6);
-            border: none; padding: 15px;
-            border-radius: 12px; color: white; font-weight: 700;
-            cursor: pointer; transition: 0.3s; margin-top: 10px;
-        }
-        button#generate-btn:hover { transform: translateY(-2px); box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
-
-        /* --- BOX 2: OUTPUT / CHAT --- */
-        .chat-history {
-            flex-grow: 1;
-            overflow-y: auto;
-            display: flex; flex-direction: column; gap: 15px;
-            padding-right: 10px;
+        /* --- 4. HEADER (Floating Glass Pill) --- */
+        header {
+            margin-top: 40px;
+            padding: 25px 60px;
+            border-radius: 50px;
+            text-align: center;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            max-width: 800px;
+            animation: fadeDown 1s ease-out;
         }
 
-        .msg { padding: 15px 20px; border-radius: 15px; line-height: 1.6; font-size: 0.95rem; max-width: 85%; }
-        .msg.bot { background: rgba(255,255,255,0.05); border: 1px solid var(--border); align-self: flex-start; }
-        .msg.user { background: var(--neon); color: white; align-self: flex-end; }
-        
-        /* Markdown Styles */
-        .msg strong { color: #c7d2fe; }
-        .msg ul { padding-left: 20px; }
-
-        /* Follow Up Input */
-        .chat-input-area {
-            display: flex; gap: 10px; margin-top: auto; display: none; /* Hidden initially */
+        .badge {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0e7ff;
         }
 
-        /* --- HEADER --- */
-        header { text-align: center; margin-top: 40px; }
-        h1 { font-family: 'Outfit', sans-serif; font-size: 3rem; margin: 0; 
-             background: linear-gradient(to right, white, #818cf8); -webkit-background-clip: text; color: transparent; }
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 4rem;
+            margin: 0;
+            background: linear-gradient(180deg, #ffffff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(165, 180, 252, 0.2);
+        }
 
-        /* Loading Spinner */
-        .loader { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--neon); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; margin: 0 auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Typewriter Styles */
+        .subtitle {
+            font-size: 1.1rem;
+            color: rgba(255,255,255,0.7);
+            font-weight: 300;
+            min-height: 24px; /* Prevents layout jump */
+        }
 
+        .typewriter-text {
+            color: #c084fc; /* Neon Purple */
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            background-color: #c084fc;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* --- 5. MAIN CHAT CONTAINER --- */
+        .main-stage {
+            width: 95%;
+            max-width: 1300px;
+            height: 80vh;
+            margin: 40px 0;
+            border-radius: 30px;
+            overflow: hidden;
+            position: relative;
+            animation: scaleUp 0.8s ease-out 0.2s backwards;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* --- 6. FOOTER --- */
+        footer {
+            margin-bottom: 30px;
+            padding: 15px 40px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        footer a { color: white; text-decoration: none; opacity: 0.7; transition: 0.2s; }
+        footer a:hover { opacity: 1; text-decoration: underline; }
+
+        /* --- ANIMATIONS --- */
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleUp {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* --- MOBILE --- */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            header { padding: 20px; width: 85%; margin-top: 20px; }
+            .main-stage { height: 70vh; width: 90%; }
+            .swirl-1 { width: 150vw; height: 150vw; }
+        }
     </style>
 </head>
 <body>
 
-    <div class="orb"></div>
-
-    <header>
-        <h1>Saarthi AI</h1>
-        <div style="color: #94a3b8;">Your Personal Guidance Counselor</div>
-    </header>
-
-    <div class="container">
-        
-        <div class="glass-box">
-            <h2>Your Profile</h2>
-            
-            <div>
-                <label>Current Subjects</label>
-                <input type="text" id="subjects" placeholder="e.g. Math, Physics, English">
-            </div>
-            
-            <div>
-                <label>Interests</label>
-                <input type="text" id="interests" placeholder="e.g. Robotics, Law">
-            </div>
-
-            <div>
-                <label>Average Grade (%)</label>
-                <input type="number" id="average" placeholder="85">
-            </div>
-
-            <div>
-                <label>Current Grade</label>
-                <select id="grade">
-                    <option>Grade 12</option>
-                    <option>Grade 11</option>
-                    <option>Gap Year</option>
-                </select>
-            </div>
-
-            <div>
-                <label>Location</label>
-                <input type="text" id="location" placeholder="City, ON">
-            </div>
-
-            <button id="generate-btn" onclick="generateRoadmap()">
-                <span id="btn-text">Generate Roadmap 🚀</span>
-                <div class="loader" id="btn-loader"></div>
-            </button>
-        </div>
-
-        <div class="glass-box">
-            <h2>Guidance</h2>
-            <div class="chat-history" id="chat-box">
-                <div class="msg bot">👋 Hi! Fill out your profile on the left and click "Generate" to start.</div>
-            </div>
-
-            <div class="chat-input-area" id="followup-area">
-                <input type="text" id="chat-input" placeholder="Ask a follow-up question..." onkeypress="handleEnter(event)">
-                <button onclick="sendFollowUp()" style="background: var(--neon); border: none; border-radius: 8px; padding: 0 20px; color: white; cursor: pointer;">Send</button>
-            </div>
-        </div>
-
+    <div class="swirl-container">
+        <div class="swirl-1"></div>
+        <div class="swirl-2"></div>
     </div>
 
-    <script type="module">
-        import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
-
-        // 👇 REPLACE THIS WITH YOUR HUGGING FACE URL 👇
-        const SPACE_URL = "https://rajshah13-saarthi.hf.space"; 
+    <header class="glass-panel">
+        <div class="badge">Version 2.0 • Live Data</div>
+        <h1>Saarthi AI</h1>
         
-        let app_client;
+        <div class="subtitle">
+            Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
+        </div>
+    </header>
 
-        // Initialize Client
-        async function init() {
-            try {
-                app_client = await Client.connect(SPACE_URL);
-                console.log("Connected to Saarthi Brain 🧠");
-            } catch (error) {
-                console.error("Connection Failed:", error);
-                addMessage("bot", "⚠️ Error: Could not connect to the AI server. Please try again later.");
-            }
-        }
-        init();
+    <div class="main-stage glass-panel">
+        <iframe src="https://rajshah13-saarthi.hf.space"
+            style="background: transparent;" 
+            allowtransparency="true"
+            frameborder="0"
+            width="100%"
+            height="100%">
+        </iframe>
+    </div>
 
-        // 1. Generate Roadmap Function
-        window.generateRoadmap = async function() {
-            const btn = document.getElementById('generate-btn');
-            const loader = document.getElementById('btn-loader');
-            const text = document.getElementById('btn-text');
+    <footer class="glass-panel">
+        <span>Built by Raj Shah</span>
+        <span>•</span>
+        <a href="#">About</a>
+        <a href="#">GitHub</a>
+    </footer>
 
-            // UI Loading State
-            text.style.display = "none";
-            loader.style.display = "block";
-            btn.disabled = true;
+    <script>
+        const textElement = document.getElementById('typing');
+        const phrases = ["Engineering.", "Computer Science.", "Health Sciences.", "Business.", "Your Future."];
+        let phraseIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
 
-            // Gather Data
-            const subjects = document.getElementById('subjects').value.split(',').map(s => s.trim());
-            const interests = document.getElementById('interests').value;
-            const avg = document.getElementById('average').value;
-            const grade = document.getElementById('grade').value;
-            const loc = document.getElementById('location').value;
-
-            try {
-                // Call Python Function "generate"
-                const result = await app_client.predict("/generate", [
-                    subjects, interests, avg, grade, loc
-                ]);
-
-                // The result comes back as an array. The chat history is index 0.
-                // The history is a list of [user_msg, bot_msg]. We want the last bot msg.
-                const chatHistory = result.data[0]; 
-                const botResponse = chatHistory[chatHistory.length - 1][1];
-
-                addMessage("user", "Generate Roadmap based on my profile.");
-                addMessage("bot", botResponse);
-
-                // Show Follow-up Input
-                document.getElementById('followup-area').style.display = "flex";
-
-            } catch (error) {
-                addMessage("bot", "❌ Error generating roadmap: " + error.message);
-            } finally {
-                // Reset Button
-                text.style.display = "block";
-                loader.style.display = "none";
-                btn.disabled = false;
-            }
-        }
-
-        // 2. Follow-Up Chat Function
-        window.sendFollowUp = async function() {
-            const input = document.getElementById('chat-input');
-            const msg = input.value;
-            if (!msg) return;
-
-            addMessage("user", msg);
-            input.value = ""; // Clear input
-
-            try {
-                // Call Python Function "chat"
-                // Note: We send 'null' for state/history because the Python client handles session state automatically in some versions,
-                // but for robust custom API, we rely on the backend state logic we built.
-                const result = await app_client.predict("/chat", [
-                    msg, 
-                    [], // History placeholder
-                    null // Context placeholder (backend handles this via state)
-                ]);
-
-                const chatHistory = result.data[0];
-                const botResponse = chatHistory[chatHistory.length - 1][1];
-                addMessage("bot", botResponse);
-
-            } catch (error) {
-                addMessage("bot", "❌ Error: " + error.message);
-            }
-        }
-
-        // Helper: Add Message to UI
-        function addMessage(role, text) {
-            const box = document.getElementById('chat-box');
-            const div = document.createElement('div');
-            div.className = `msg ${role}`;
+        function type() {
+            const currentPhrase = phrases[phraseIndex];
             
-            // Render Markdown (Bold, Lists)
-            div.innerHTML = marked.parse(text);
-            
-            box.appendChild(div);
-            box.scrollTop = box.scrollHeight; // Auto scroll
+            if (isDeleting) {
+                textElement.textContent = currentPhrase.substring(0, charIndex - 1);
+                charIndex--;
+            } else {
+                textElement.textContent = currentPhrase.substring(0, charIndex + 1);
+                charIndex++;
+            }
+
+            if (!isDeleting && charIndex === currentPhrase.length) {
+                isDeleting = true;
+                setTimeout(type, 2000); // Wait 2s before deleting
+            } else if (isDeleting && charIndex === 0) {
+                isDeleting = false;
+                phraseIndex = (phraseIndex + 1) % phrases.length;
+                setTimeout(type, 500); // Wait 0.5s before typing next
+            } else {
+                setTimeout(type, isDeleting ? 50 : 100);
+            }
         }
 
-        // Helper: Enter Key
-        window.handleEnter = function(e) {
-            if (e.key === 'Enter') window.sendFollowUp();
-        }
+        document.addEventListener('DOMContentLoaded', type);
     </script>
 
 </body>
