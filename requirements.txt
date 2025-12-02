@@ -1,5 +1,7 @@
+gradio
+google-generativeai
 requests
 beautifulsoup4
-google-generativeai
-gradio
 python-dotenv
+scikit-learn
+numpy
