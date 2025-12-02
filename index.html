@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saarthi AI | Crystal Edition</title>
+    <title>Saarthi AI | Your Personal Guide</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@700;800&family=Space+Grotesk:wght@300;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@700;800&family=Space+Grotesk:wght@300;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -43,7 +43,6 @@
             background: #000;
         }
 
-        /* The Giant Rotating Galaxy */
         .swirl-1 {
             position: absolute;
             top: -20%; left: -20%;
@@ -60,7 +59,6 @@
             border-radius: 40%;
         }
 
-        /* The Secondary Pulse */
         .swirl-2 {
             position: absolute;
             bottom: -10%; right: -10%;
@@ -82,22 +80,22 @@
             50% { transform: scale(1.2); opacity: 0.5; }
         }
 
-        /* --- 3. GLASS UTILITY CLASS (Apply this to anything to make it glass) --- */
+        /* --- 3. GLASS UTILITY CLASS --- */
         .glass-panel {
             background: var(--glass-surface);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            border-top: 1px solid var(--glass-highlight); /* Top highlight for 3D effect */
+            border-top: 1px solid var(--glass-highlight);
             border-left: 1px solid var(--glass-highlight);
         }
 
         /* --- 4. HEADER (Floating Glass Pill) --- */
         header {
             margin-top: 40px;
-            padding: 20px 60px;
-            border-radius: 50px; /* Pill shape */
+            padding: 25px 60px;
+            border-radius: 50px;
             text-align: center;
             z-index: 10;
             display: flex;
@@ -130,11 +128,38 @@
             text-shadow: 0 0 40px rgba(165, 180, 252, 0.2);
         }
 
-        /* --- 5. MAIN CHAT CONTAINER (The Big Glass Block) --- */
+        /* Typewriter Styles */
+        .subtitle {
+            font-size: 1.1rem;
+            color: rgba(255,255,255,0.7);
+            font-weight: 300;
+            min-height: 24px; /* Prevents layout jump */
+        }
+
+        .typewriter-text {
+            color: #c084fc; /* Neon Purple */
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            background-color: #c084fc;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* --- 5. MAIN CHAT CONTAINER --- */
         .main-stage {
             width: 95%;
             max-width: 1300px;
-            height: 80vh; /* Takes up most of the screen */
+            height: 80vh;
             margin: 40px 0;
             border-radius: 30px;
             overflow: hidden;
@@ -148,7 +173,7 @@
             border: none;
         }
 
-        /* --- 6. FOOTER (Floating Glass Bar) --- */
+        /* --- 6. FOOTER --- */
         footer {
             margin-bottom: 30px;
             padding: 15px 40px;
@@ -192,11 +217,14 @@
     <header class="glass-panel">
         <div class="badge">Version 2.0 • Live Data</div>
         <h1>Saarthi AI</h1>
-        <div style="font-weight: 300; opacity: 0.8;">Your University Guide</div>
+        
+        <div class="subtitle">
+            Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
+        </div>
     </header>
 
     <div class="main-stage glass-panel">
-        <iframe src="https://rajshah13-saarthi.hf.space"></iframe>
+        <iframe src="https://YOUR-USERNAME-saarthi-backend.hf.space"></iframe>
     </div>
 
     <footer class="glass-panel">
@@ -205,6 +233,39 @@
         <a href="#">About</a>
         <a href="#">GitHub</a>
     </footer>
+
+    <script>
+        const textElement = document.getElementById('typing');
+        const phrases = ["Engineering.", "Computer Science.", "Health Sciences.", "Business.", "Your Future."];
+        let phraseIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
+
+        function type() {
+            const currentPhrase = phrases[phraseIndex];
+            
+            if (isDeleting) {
+                textElement.textContent = currentPhrase.substring(0, charIndex - 1);
+                charIndex--;
+            } else {
+                textElement.textContent = currentPhrase.substring(0, charIndex + 1);
+                charIndex++;
+            }
+
+            if (!isDeleting && charIndex === currentPhrase.length) {
+                isDeleting = true;
+                setTimeout(type, 2000); // Wait 2s before deleting
+            } else if (isDeleting && charIndex === 0) {
+                isDeleting = false;
+                phraseIndex = (phraseIndex + 1) % phrases.length;
+                setTimeout(type, 500); // Wait 0.5s before typing next
+            } else {
+                setTimeout(type, isDeleting ? 50 : 100);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', type);
+    </script>
 
 </body>
 </html>
