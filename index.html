@@ -18,9 +18,10 @@
             --primary-swirl: #6366f1;
             --secondary-swirl: #a855f7;
             --tertiary-swirl: #ec4899;
+            --cable-color: rgba(99, 102, 241, 0.15);
         }
 
-        /* --- 1. RESET & BASE --- */
+        /* --- 1. BASE STYLES --- */
         body {
             margin: 0;
             font-family: 'Inter', sans-serif;
@@ -32,178 +33,148 @@
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
+            padding-bottom: 120px; /* ADDED: Extra gap at bottom */
         }
 
-        /* --- 2. THE SWIRLS (Background Magic) --- */
-        .swirl-container {
+        /* --- 2. SPACE CABLES (New!) --- */
+        .cables-container {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
+            top: 0; bottom: 0;
+            width: 120px; /* Width of the cable tracks */
             z-index: -1;
-            overflow: hidden;
-            background: #000;
+            pointer-events: none;
+        }
+        
+        .cables-left {
+            left: 0;
+            border-right: 1px solid var(--cable-color);
+            /* Create vertical lines using gradients */
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 39px,
+                var(--cable-color) 40px,
+                transparent 41px
+            );
+            /* Glow Effect */
+            box-shadow: inset -10px 0 30px -10px rgba(99, 102, 241, 0.1);
+        }
+
+        .cables-right {
+            right: 0;
+            border-left: 1px solid var(--cable-color);
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 39px,
+                var(--cable-color) 40px,
+                transparent 41px
+            );
+            box-shadow: inset 10px 0 30px -10px rgba(99, 102, 241, 0.1);
+        }
+
+        /* Data Pulse Animation (The little light traveling down) */
+        .data-pulse {
+            position: absolute;
+            top: -10%; left: 40px; /* Aligned with one of the grid lines */
+            width: 2px; height: 100px;
+            background: linear-gradient(to bottom, transparent, #818cf8, transparent);
+            animation: pulseDrop 8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0.7;
+        }
+        
+        /* A second pulse at a different speed */
+        .data-pulse.delayed {
+            left: 80px;
+            animation-delay: 4s;
+            height: 150px;
+            background: linear-gradient(to bottom, transparent, #c084fc, transparent);
+        }
+
+        @keyframes pulseDrop {
+            0% { top: -20%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 120%; opacity: 0; }
+        }
+
+        /* --- 3. BACKGROUND SWIRLS --- */
+        .swirl-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2; overflow: hidden; background: #000;
         }
 
         .swirl-1 {
-            position: absolute;
-            top: -20%; left: -20%;
-            width: 80vw; height: 80vw;
-            background: conic-gradient(from 0deg, 
-                var(--primary-swirl), 
-                transparent 40%, 
-                var(--secondary-swirl), 
-                transparent 70%, 
-                var(--primary-swirl));
-            filter: blur(80px);
-            opacity: 0.4;
-            animation: spin 20s linear infinite;
-            border-radius: 40%;
+            position: absolute; top: -20%; left: -20%; width: 80vw; height: 80vw;
+            background: conic-gradient(from 0deg, var(--primary-swirl), transparent 40%, var(--secondary-swirl), transparent 70%, var(--primary-swirl));
+            filter: blur(80px); opacity: 0.4; animation: spin 20s linear infinite; border-radius: 40%;
         }
 
         .swirl-2 {
-            position: absolute;
-            bottom: -10%; right: -10%;
-            width: 60vw; height: 60vw;
+            position: absolute; bottom: -10%; right: -10%; width: 60vw; height: 60vw;
             background: radial-gradient(circle, var(--tertiary-swirl), transparent 70%);
-            filter: blur(100px);
-            opacity: 0.3;
-            animation: breathe 8s ease-in-out infinite;
+            filter: blur(100px); opacity: 0.3; animation: breathe 8s ease-in-out infinite;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg) scale(1); }
-            50% { transform: rotate(180deg) scale(1.1); }
-            100% { transform: rotate(360deg) scale(1); }
-        }
+        @keyframes spin { 0% { transform: rotate(0deg) scale(1); } 100% { transform: rotate(360deg) scale(1); } }
+        @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.2); opacity: 0.5; } }
 
-        @keyframes breathe {
-            0%, 100% { transform: scale(1); opacity: 0.3; }
-            50% { transform: scale(1.2); opacity: 0.5; }
-        }
-
-        /* --- 3. GLASS UTILITY CLASS --- */
+        /* --- 4. UI COMPONENTS --- */
         .glass-panel {
             background: var(--glass-surface);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            border-top: 1px solid var(--glass-highlight);
-            border-left: 1px solid var(--glass-highlight);
+            border-top: 1px solid var(--glass-highlight); border-left: 1px solid var(--glass-highlight);
         }
 
-        /* --- 4. HEADER (Floating Glass Pill) --- */
         header {
-            margin-top: 40px;
-            padding: 25px 60px;
-            border-radius: 50px;
-            text-align: center;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            max-width: 800px;
-            animation: fadeDown 1s ease-out;
+            margin-top: 60px; padding: 25px 60px; border-radius: 50px;
+            text-align: center; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px;
+            max-width: 800px; animation: fadeDown 1s ease-out;
         }
 
         .badge {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            padding: 5px 15px;
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #e0e7ff;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.75rem; text-transform: uppercase;
+            letter-spacing: 2px; padding: 5px 15px; border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e7ff;
         }
 
         h1 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 4rem;
-            margin: 0;
+            font-family: 'Outfit', sans-serif; font-size: 4rem; margin: 0;
             background: linear-gradient(180deg, #ffffff 0%, #a5b4fc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             text-shadow: 0 0 40px rgba(165, 180, 252, 0.2);
         }
 
-        /* Typewriter Styles */
-        .subtitle {
-            font-size: 1.1rem;
-            color: rgba(255,255,255,0.7);
-            font-weight: 300;
-            min-height: 24px; /* Prevents layout jump */
-        }
+        .subtitle { font-size: 1.1rem; color: rgba(255,255,255,0.7); font-weight: 300; min-height: 24px; }
+        .typewriter-text { color: #c084fc; font-family: 'JetBrains Mono', monospace; font-weight: 500; text-shadow: 0 0 10px rgba(192, 132, 252, 0.4); }
+        .cursor { display: inline-block; width: 2px; background-color: #c084fc; animation: blink 1s infinite; }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-        .typewriter-text {
-            color: #c084fc; /* Neon Purple */
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 500;
-            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
-        }
-
-        .cursor {
-            display: inline-block;
-            width: 2px;
-            background-color: #c084fc;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-
-        /* --- 5. MAIN CHAT CONTAINER --- */
         .main-stage {
-            width: 95%;
-            max-width: 1300px;
-            height: 80vh;
-            margin: 40px 0;
-            border-radius: 30px;
-            overflow: hidden;
-            position: relative;
+            width: 95%; max-width: 1300px; height: 80vh;
+            margin: 40px 0; border-radius: 30px; overflow: hidden; position: relative;
             animation: scaleUp 0.8s ease-out 0.2s backwards;
         }
 
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
+        iframe { width: 100%; height: 100%; border: none; }
 
-        /* --- 6. FOOTER --- */
         footer {
-            margin-bottom: 30px;
-            padding: 15px 40px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.6);
-            display: flex;
-            gap: 20px;
-            align-items: center;
+            margin-top: 20px; /* Added spacing */
+            padding: 15px 40px; border-radius: 20px; font-size: 0.85rem; color: rgba(255, 255, 255, 0.6);
+            display: flex; gap: 20px; align-items: center; z-index: 10;
         }
-
         footer a { color: white; text-decoration: none; opacity: 0.7; transition: 0.2s; }
         footer a:hover { opacity: 1; text-decoration: underline; }
 
-        /* --- ANIMATIONS --- */
-        @keyframes fadeDown {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes scaleUp {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
+        @keyframes fadeDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-        /* --- MOBILE --- */
         @media (max-width: 768px) {
             h1 { font-size: 2.5rem; }
-            header { padding: 20px; width: 85%; margin-top: 20px; }
-            .main-stage { height: 70vh; width: 90%; }
-            .swirl-1 { width: 150vw; height: 150vw; }
+            .cables-container { display: none; } /* Hide cables on mobile for space */
         }
     </style>
 </head>
@@ -214,21 +185,31 @@
         <div class="swirl-2"></div>
     </div>
 
+    <div class="cables-container cables-left">
+        <div class="data-pulse"></div>
+        <div class="data-pulse delayed"></div>
+    </div>
+
+    <div class="cables-container cables-right">
+        <div class="data-pulse"></div>
+        <div class="data-pulse delayed"></div>
+    </div>
+
     <header class="glass-panel">
         <div class="badge">Version 2.0 • Live Data</div>
         <h1>Saarthi AI</h1>
-        
         <div class="subtitle">
             Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
         </div>
     </header>
 
     <div class="main-stage glass-panel">
-        <iframe src="https://rajshah13-saarthi.hf.space"
+        <iframe 
+            src="https://rajshah13-saarthi.hf.space"
             style="background: transparent;" 
             allowtransparency="true"
             frameborder="0"
-            width="100%"
+            width="100%" 
             height="100%">
         </iframe>
     </div>
@@ -236,7 +217,6 @@
     <footer class="glass-panel">
         <span>Built by Raj Shah</span>
         <span>•</span>
-        <a href="#">About</a>
         <a href="#">GitHub</a>
     </footer>
 
@@ -249,7 +229,6 @@
 
         function type() {
             const currentPhrase = phrases[phraseIndex];
-            
             if (isDeleting) {
                 textElement.textContent = currentPhrase.substring(0, charIndex - 1);
                 charIndex--;
@@ -257,19 +236,17 @@
                 textElement.textContent = currentPhrase.substring(0, charIndex + 1);
                 charIndex++;
             }
-
             if (!isDeleting && charIndex === currentPhrase.length) {
                 isDeleting = true;
-                setTimeout(type, 2000); // Wait 2s before deleting
+                setTimeout(type, 2000);
             } else if (isDeleting && charIndex === 0) {
                 isDeleting = false;
                 phraseIndex = (phraseIndex + 1) % phrases.length;
-                setTimeout(type, 500); // Wait 0.5s before typing next
+                setTimeout(type, 500);
             } else {
                 setTimeout(type, isDeleting ? 50 : 100);
             }
         }
-
         document.addEventListener('DOMContentLoaded', type);
     </script>
 
