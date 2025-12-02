@@ -3,34 +3,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saarthi AI | University Guidance</title>
+    <title>Saarthi AI | Your Personal University Guide</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700;900&display=swap" rel="stylesheet">
+
     <style>
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        header { text-align: center; padding: 40px 20px; }
-        h1 { font-size: 3rem; margin: 0; background: linear-gradient(90deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .subtitle { color: #94a3b8; margin-top: 10px; font-size: 1.2rem; }
-        
-        /* The Window for your AI */
-        .chat-frame {
-            width: 90%; max-width: 1200px; height: 800px;
-            border: 1px solid #334155; border-radius: 15px;
-            background: #1e293b; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            overflow: hidden; margin-bottom: 40px;
+        /* --- CORE VARIABLES --- */
+        :root {
+            --primary-glow: radial-gradient(circle, rgba(99,102,241,0.4) 0%, rgba(0,0,0,0) 70%);
+            --secondary-glow: radial-gradient(circle, rgba(236,72,153,0.3) 0%, rgba(0,0,0,0) 70%);
+            --glass-bg: rgba(30, 41, 59, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-muted: #94a3b8;
         }
-        iframe { width: 100%; height: 100%; border: none; }
-        footer { margin-top: auto; padding: 20px; color: #64748b; font-size: 0.8rem; }
+
+        /* --- ANIMATIONS --- */
+        @keyframes float {
+            0% { transform: translate(0px, 0px); }
+            50% { transform: translate(-20px, 20px); }
+            100% { transform: translate(0px, 0px); }
+        }
+
+        @keyframes float-reverse {
+            0% { transform: translate(0px, 0px); }
+            50% { transform: translate(20px, -20px); }
+            100% { transform: translate(0px, 0px); }
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- BASE STYLES --- */
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #020617; /* Deepest Navy */
+            color: var(--text-main);
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        /* --- BACKGROUND ORBS (The "Aurora" Effect) --- */
+        .orb-1 {
+            position: fixed;
+            top: -10%; left: -10%;
+            width: 50vw; height: 50vw;
+            background: var(--primary-glow);
+            filter: blur(80px);
+            z-index: -1;
+            animation: float 10s infinite ease-in-out;
+        }
+        
+        .orb-2 {
+            position: fixed;
+            bottom: -10%; right: -10%;
+            width: 50vw; height: 50vw;
+            background: var(--secondary-glow);
+            filter: blur(80px);
+            z-index: -1;
+            animation: float-reverse 12s infinite ease-in-out;
+        }
+
+        /* --- HEADER SECTION --- */
+        header {
+            text-align: center;
+            padding: 60px 20px 40px;
+            z-index: 10;
+            animation: slideUpFade 0.8s ease-out;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 4.5rem;
+            margin: 0;
+            letter-spacing: -2px;
+            /* The Cool Gradient Text */
+            background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            /* The Subtle Glow */
+            text-shadow: 0px 0px 30px rgba(165, 180, 252, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            color: var(--text-muted);
+            margin-top: 15px;
+            font-weight: 300;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .highlight {
+            color: #818cf8;
+            font-weight: 600;
+        }
+
+        /* --- THE CHATBOT FRAME (Glassmorphism) --- */
+        .glass-container {
+            width: 90%;
+            max-width: 1200px;
+            height: 800px;
+            
+            /* The Glass Effect Logic */
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px); /* This blurs what's behind it */
+            -webkit-backdrop-filter: blur(20px);
+            
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); /* Deep shadow */
+            
+            overflow: hidden;
+            margin-bottom: 50px;
+            animation: slideUpFade 1s ease-out 0.2s backwards; /* Delays slightly */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        /* Subtle hover effect for interactivity */
+        .glass-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 60px -12px rgba(99, 102, 241, 0.15);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            margin-top: auto;
+            padding: 30px;
+            color: rgba(255,255,255,0.3);
+            font-size: 0.9rem;
+            text-align: center;
+            border-top: 1px solid var(--glass-border);
+            width: 100%;
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        /* --- MOBILE RESPONSIVENESS --- */
+        @media (max-width: 768px) {
+            h1 { font-size: 3rem; }
+            .glass-container { height: 700px; width: 95%; }
+            .orb-1, .orb-2 { opacity: 0.5; } /* Reduce glow on mobile */
+        }
     </style>
 </head>
 <body>
+
+    <div class="orb-1"></div>
+    <div class="orb-2"></div>
+
     <header>
         <h1>Saarthi AI 🏹</h1>
-        <div class="subtitle">Your 24/7 Personal University Guidance Counselor</div>
+        <div class="subtitle">
+            Your intelligent 24/7 guidance counselor for <span class="highlight">Ontario</span> students.
+            Powered by Gemini & Real-Time Data.
+        </div>
     </header>
 
-    <div class="chat-frame">
+    <div class="glass-container">
         <iframe src="https://rajshah13-saarthi.hf.space"></iframe>
     </div>
 
-    <footer>Built with ❤️ by Raj Shah for Ontario Students</footer>
+    <footer>
+        <p>Built with ❤️ by Raj Shah for Ontario Students • Powered by Gemini 2.5 Flash</p>
+    </footer>
+
 </body>
 </html>
