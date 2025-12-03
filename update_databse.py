@@ -7,6 +7,7 @@ import os
 import time
 import concurrent.futures
 from dotenv import load_dotenv
+from huggingface_hub import HfApi
 
 # --- SETUP ---
 load_dotenv()
@@ -119,4 +120,21 @@ def main():
     print("👉 Now upload 'university_data_cached.json' to Hugging Face.")
 
 if __name__ == "__main__":
+    # 1. Run the Scraper
     main()
+    
+    # 2. Upload ONLY the data file to Hugging Face
+    print("🚀 Uploading database to Hugging Face...")
+    
+    try:
+        api = HfApi()
+        api.upload_file(
+            path_or_fileobj="university_data_cached.json", # The local file
+            path_in_repo="university_data_cached.json",    # Where it goes in the Space
+            repo_id="rajshah13/saarthi",                   # YOUR SPACE ID
+            repo_type="space",
+            token=os.getenv("HF_TOKEN")                    # Reads the token securely
+        )
+        print("✅ Upload Complete! The Space will now restart with new data.")
+    except Exception as e:
+        print(f"❌ Upload Failed: {e}")
