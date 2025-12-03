@@ -43,12 +43,19 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Bot"
           
-          # Add Hugging Face as a remote
-          git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME
-
-          git pull space main --rebase
+          # 1. Move the fresh data to a temp location so Git doesn't complain
+          mv university_data_cached.json /tmp/university_data_cached.json
           
-          # Force push the new data
+          # 2. Add Remote
+          git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME
+          
+          # 3. Pull carefully (Allow unrelated histories just in case)
+          git pull space main --rebase --allow-unrelated-histories
+          
+          # 4. Move the fresh data BACK (Overwriting whatever we just pulled)
+          mv /tmp/university_data_cached.json university_data_cached.json
+          
+          # 5. Commit and Push
           git add university_data_cached.json
           git commit -m "🤖 Monthly Data Auto-Update" || echo "No changes to commit"
           git push space main
