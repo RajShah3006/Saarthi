@@ -37,8 +37,8 @@ jobs:
       - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_USERNAME: YOUR_HUGGINGFACE_USERNAME # <--- CHANGE THIS
-          SPACE_NAME: saarthi-backend # <--- CHANGE THIS
+          HF_USERNAME: rajshah13 # <--- CHANGE THIS
+          SPACE_NAME: saarthi # <--- CHANGE THIS
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Bot"
