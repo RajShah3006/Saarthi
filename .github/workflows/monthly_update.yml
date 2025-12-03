@@ -1,9 +1,47 @@
-- name: Push to Hugging Face
+name: Monthly Data Refresh
+
+on:
+  schedule:
+    # Runs at 00:00 on the 1st of every month
+    - cron: '0 0 1 * *'
+  # Allows you to run this manually from the Actions tab for testing
+  workflow_dispatch:
+
+jobs:
+  scrape-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout the code
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # 2. Install Python 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3. Install Libraries
+      - name: Install Dependencies
+        run: pip install requests beautifulsoup4 google-generativeai python-dotenv scikit-learn numpy
+
+      # 4. Run the Scraper
+      - name: Run Scraper Script
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        # Make sure this filename matches exactly what is in your repo
+        run: python update_database.py
+
+      # 5. Push to Hugging Face
+      - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # CHANGE THESE TO YOUR ACTUAL DETAILS
           HF_USERNAME: rajshah13
           SPACE_NAME: saarthi
-          GIT_LFS_SKIP_SMUDGE: 1  # <--- THE MAGIC FIX (Skips downloading the broken file)
+          GIT_LFS_SKIP_SMUDGE: 1
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions Bot"
