@@ -28,4 +28,4 @@ jobs:
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python update_databsse.py
+        run: python update_databse.py
