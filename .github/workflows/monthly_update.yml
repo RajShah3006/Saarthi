@@ -32,7 +32,7 @@ jobs:
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         # Make sure this filename matches exactly what is in your repo
-        run: python update_database.py
+        run: python update_databse.py
 
       # 5. Push to Hugging Face
       - name: Push to Hugging Face
