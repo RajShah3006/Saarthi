@@ -1,0 +1,52 @@
+name: Monthly Data Refresh
+
+# Trigger: Runs at 00:00 on the 1st of every month
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  # Also allows you to click "Run Now" manually for testing
+  workflow_dispatch:
+
+jobs:
+  scrape-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Get your code
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # 2. Install Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3. Install Libraries
+      - name: Install Dependencies
+        run: pip install requests beautifulsoup4 google-generativeai python-dotenv scikit-learn numpy
+
+      # 4. Run the Scraper (The heavy lifting)
+      - name: Run Scraper Script
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: python update_database.py
+
+      # 5. Push the new JSON file to Hugging Face
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: YOUR_HUGGINGFACE_USERNAME # <--- CHANGE THIS
+          SPACE_NAME: saarthi-backend # <--- CHANGE THIS
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions Bot"
+          
+          # Add Hugging Face as a remote
+          git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME
+          
+          # Force push the new data
+          git add university_data_cached.json
+          git commit -m "🤖 Monthly Data Auto-Update" || echo "No changes to commit"
+          git push space main
