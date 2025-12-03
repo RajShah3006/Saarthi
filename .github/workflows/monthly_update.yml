@@ -2,20 +2,15 @@ name: Monthly Data Refresh
 
 on:
   schedule:
-    # Runs at 00:00 on the 1st of every month
-    - cron: '0 0 1 * *'
-  # Allows manual run from Actions tab
-  workflow_dispatch:
+    - cron: '0 0 1 * *' # Runs monthly
+  workflow_dispatch:      # Allows manual run
 
 jobs:
-  scrape-and-deploy:
+  scrape-and-upload:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout code
+      # 1. Checkout Code
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          lfs: true
 
       # 2. Setup Python
       - name: Set up Python
@@ -25,40 +20,12 @@ jobs:
 
       # 3. Install Libraries
       - name: Install Dependencies
-        run: pip install requests beautifulsoup4 google-generativeai python-dotenv scikit-learn numpy
+        # We added 'huggingface_hub' to the list
+        run: pip install requests beautifulsoup4 google-generativeai python-dotenv scikit-learn numpy huggingface_hub
 
-      # 4. Run Scraper
-      - name: Run Scraper Script
+      # 4. Run Script (Scrapes AND Uploads)
+      - name: Run Updater
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        # Ensure update_database.py is in your repo root. 
-        # If it's in a folder, change to: python FolderName/update_database.py
-        run: python update_databse.py
-
-      # 5. Force Push to Hugging Face
-      - name: Push to Hugging Face
-        env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          # REPLACE WITH YOUR ACTUAL USERNAME AND SPACE NAME
-          HF_USERNAME: rajshah13
-          SPACE_NAME: saarthi
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions Bot"
-          
-          # 1. Setup Git LFS (Large File Storage) for the JSON file
-          git lfs install
-          git lfs track "university_data_cached.json"
-          git add .gitattributes
-          
-          # 2. Stage the new data file
-          git add university_data_cached.json
-          
-          # 3. Commit the changes
-          # The '|| echo' prevents the script from failing if there's nothing new
-          git commit -m "🤖 Monthly Data Auto-Update" || echo "No changes to commit"
-          
-          # 4. Add Remote & FORCE PUSH
-          # This overwrites Hugging Face with your GitHub version (fixing conflicts)
-          git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME
-          git push --force space main
+        run: python update_databsse.py
