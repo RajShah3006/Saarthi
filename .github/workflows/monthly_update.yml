@@ -31,7 +31,7 @@ jobs:
       - name: Run Scraper Script
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: update_databse.py
+        run: update_database.py
 
       # 5. Push the new JSON file to Hugging Face
       - name: Push to Hugging Face
