@@ -1,7 +1,9 @@
-gradio
+gradio>=4.44.0
+huggingface_hub>=0.25.0
 google-generativeai
 requests
 beautifulsoup4
 python-dotenv
 scikit-learn
 numpy
+pandas
