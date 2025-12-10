@@ -1,3 +1,4 @@
+<!--
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -252,3 +253,86 @@
 
 </body>
 </html>
+-->
+<div class="main-stage glass-panel">
+    <div class="iframe-container">
+        <iframe 
+            src="https://rajshah13-saarthi.hf.space" 
+            title="Saarthi AI Guide"
+            frameborder="0" 
+            allowtransparency="true"
+            scrolling="no">
+        </iframe>
+        <div class="iframe-loading" id="iframe-loading">Loading Saarthi AI...</div>
+    </div>
+</div>
+<div id="admin-section" style="display:none; margin-top:20px;">
+    <iframe 
+        src="https://rajshah13-saarthi.hf.space/admin-8273-secret" 
+        frameborder="0" 
+        style="width:100%; height:80vh;">
+    </iframe>
+</div>
+
+<button id="show-admin" style="margin-top:10px;">Admin Access</button>
+
+<script>
+document.getElementById('show-admin').addEventListener('click', () => {
+    const pwd = prompt("Enter admin password:");
+    if (pwd === "saarthi-admin-rs") { 
+        document.getElementById('admin-section').style.display = "block";
+        window.scrollTo({ top: document.getElementById('admin-section').offsetTop, behavior: 'smooth' });
+    } else {
+        alert("❌ Incorrect password");
+    }
+});
+</script>
+<style>
+.iframe-container {
+    position: relative;
+    width: 100%;
+    max-width: 1300px;
+    height: 80vh;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.iframe-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.iframe-container iframe.loaded {
+    opacity: 1;
+}
+
+.iframe-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #c084fc;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .iframe-container {
+        height: 60vh; /* reduce height on mobile */
+    }
+}
+</style>
+
+<script>
+const iframe = document.querySelector('.iframe-container iframe');
+iframe.addEventListener('load', () => {
+    iframe.classList.add('loaded');  // fade in iframe
+    document.getElementById('iframe-loading').style.display = "none"; // hide loading text
+});
+</script>
