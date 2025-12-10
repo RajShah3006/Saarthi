@@ -254,85 +254,134 @@
 </body>
 </html>
 -->
-<div class="main-stage glass-panel">
-    <div class="iframe-container">
-        <iframe 
-            src="https://rajshah13-saarthi.hf.space" 
-            title="Saarthi AI Guide"
-            frameborder="0" 
-            allowtransparency="true"
-            scrolling="no">
-        </iframe>
-        <div class="iframe-loading" id="iframe-loading">Loading Saarthi AI...</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saarthi AI 🏹 | Your Personal Guide</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@700;800&family=Space+Grotesk:wght@300;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-color: #050505;
+      --glass-surface: rgba(255,255,255,0.03);
+      --glass-border: rgba(255,255,255,0.08);
+      --glass-highlight: rgba(255,255,255,0.15);
+      --primary-swirl: #6366f1;
+      --secondary-swirl: #a855f7;
+      --tertiary-swirl: #ec4899;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding-bottom: 120px;
+    }
+
+    .swirl-container {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: -2; overflow: hidden; background: #000;
+    }
+    .swirl-1 {
+      position: absolute; top: -20%; left: -20%; width: 80vw; height: 80vw;
+      background: conic-gradient(from 0deg, var(--primary-swirl), transparent 40%, var(--secondary-swirl), transparent 70%, var(--primary-swirl));
+      filter: blur(80px); opacity: 0.4; animation: spin 20s linear infinite; border-radius: 40%;
+    }
+    .swirl-2 {
+      position: absolute; bottom: -10%; right: -10%; width: 60vw; height: 60vw;
+      background: radial-gradient(circle, var(--tertiary-swirl), transparent 70%);
+      filter: blur(100px); opacity: 0.3; animation: breathe 8s ease-in-out infinite;
+    }
+    @keyframes spin {0%{transform:rotate(0deg) scale(1)}100%{transform:rotate(360deg) scale(1)}}
+    @keyframes breathe{0%,100%{transform:scale(1);opacity:0.3}50%{transform:scale(1.2);opacity:0.5}}
+
+    header {
+      margin-top: 60px; padding: 25px 60px; border-radius: 50px;
+      text-align: center; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px;
+      max-width: 800px; backdrop-filter: blur(20px); background: var(--glass-surface);
+      border: 1px solid var(--glass-border); animation: fadeDown 1s ease-out;
+    }
+    .badge { font-family: 'Space Grotesk', sans-serif; font-size: 0.75rem; text-transform: uppercase; letter-spacing:2px; padding:5px 15px; border-radius:20px; background: rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#e0e7ff; }
+    h1 { font-family: 'Outfit', sans-serif; font-size:4rem; margin:0; background:linear-gradient(180deg,#ffffff 0%,#a5b4fc 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-shadow:0 0 40px rgba(165,180,252,0.2);}
+    .subtitle { font-size:1.1rem; color: rgba(255,255,255,0.7); font-weight: 300; min-height:24px; }
+    .typewriter-text { color: #c084fc; font-family:'JetBrains Mono', monospace; font-weight:500; text-shadow:0 0 10px rgba(192,132,252,0.4);}
+    .cursor { display:inline-block;width:2px;background-color:#c084fc;animation:blink 1s infinite;}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+    .tabs { display:flex; gap:15px; margin-top:30px; }
+    .tab-button { padding:10px 25px; border-radius:25px; cursor:pointer; border:1px solid var(--glass-border); background: var(--glass-surface); color:white; transition:0.2s; }
+    .tab-button.active { background: var(--primary-swirl); border-color: var(--primary-swirl); }
+    .iframe-container { width:95%; max-width:1300px; height:80vh; margin:20px 0; border-radius:30px; overflow:hidden; border:1px solid var(--glass-border); backdrop-filter:blur(20px); background:var(--glass-surface);}
+    iframe { width:100%; height:100%; border:none; }
+
+    footer { margin-top:20px; padding:15px 40px; border-radius:20px; font-size:0.85rem; color: rgba(255,255,255,0.6); display:flex; gap:20px; align-items:center; z-index:10;}
+    footer a { color:white; text-decoration:none; opacity:0.7; transition:0.2s;}
+    footer a:hover { opacity:1; text-decoration:underline;}
+
+    @keyframes fadeDown{from{opacity:0;transform:translateY(-30px);}to{opacity:1;transform:translateY(0);}}
+    @media(max-width:768px){h1{font-size:2.5rem;}}
+
+  </style>
+</head>
+<body>
+  <div class="swirl-container">
+    <div class="swirl-1"></div>
+    <div class="swirl-2"></div>
+  </div>
+
+  <header>
+    <div class="badge">Version 2.0 • Live Data</div>
+    <h1>Saarthi AI 🏹</h1>
+    <div class="subtitle">
+      Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
     </div>
-</div>
-<div id="admin-section" style="display:none; margin-top:20px;">
-    <iframe 
-        src="https://rajshah13-saarthi.hf.space/admin-8273-secret" 
-        frameborder="0" 
-        style="width:100%; height:80vh;">
-    </iframe>
-</div>
+  </header>
 
-<button id="show-admin" style="margin-top:10px;">Admin Access</button>
+  <div class="tabs">
+    <div class="tab-button active" data-target="student">Student Guidance</div>
+    <div class="tab-button" data-target="admin">Admin Dashboard</div>
+  </div>
 
-<script>
-document.getElementById('show-admin').addEventListener('click', () => {
-    const pwd = prompt("Enter admin password:");
-    if (pwd === "saarthi-admin-rs") { 
-        document.getElementById('admin-section').style.display = "block";
-        window.scrollTo({ top: document.getElementById('admin-section').offsetTop, behavior: 'smooth' });
-    } else {
-        alert("❌ Incorrect password");
-    }
-});
-</script>
-<style>
-.iframe-container {
-    position: relative;
-    width: 100%;
-    max-width: 1300px;
-    height: 80vh;
-    border-radius: 20px;
-    overflow: hidden;
-}
+  <div class="iframe-container">
+    <iframe id="student" src="https://www.saarthi-ai.me" style="display:block;"></iframe>
+    <iframe id="admin" src="https://www.saarthi-ai.me/admin-8273-secret" style="display:none;"></iframe>
+  </div>
 
-.iframe-container iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    opacity: 0;
-    transition: opacity 0.5s ease-in-out;
-}
+  <footer>
+    <span>Built by Raj Shah</span>
+    <span>•</span>
+    <a href="https://github.com/RajShah3006">GitHub</a>
+  </footer>
 
-.iframe-container iframe.loaded {
-    opacity: 1;
-}
+  <script>
+    const textElement=document.getElementById('typing');
+    const phrases=["Engineering.","Computer Science.","Health Sciences.","Business.","Your Future."];
+    let phraseIndex=0,charIndex=0,isDeleting=false;
+    function type(){const current=phrases[phraseIndex];if(isDeleting){textElement.textContent=current.substring(0,charIndex-1);charIndex--;}else{textElement.textContent=current.substring(0,charIndex+1);charIndex++;}if(!isDeleting&&charIndex===current.length){isDeleting=true;setTimeout(type,2000);}else if(isDeleting&&charIndex===0){isDeleting=false;phraseIndex=(phraseIndex+1)%phrases.length;setTimeout(type,500);}else{setTimeout(type,isDeleting?50:100);}}document.addEventListener('DOMContentLoaded',type);
 
-.iframe-loading {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #c084fc;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.2rem;
-    text-align: center;
-    pointer-events: none;
-}
-
-/* Mobile responsiveness */
-@media (max-width: 768px) {
-    .iframe-container {
-        height: 60vh; /* reduce height on mobile */
-    }
-}
-</style>
-
-<script>
-const iframe = document.querySelector('.iframe-container iframe');
-iframe.addEventListener('load', () => {
-    iframe.classList.add('loaded');  // fade in iframe
-    document.getElementById('iframe-loading').style.display = "none"; // hide loading text
-});
-</script>
+    // Tab functionality
+    const tabButtons=document.querySelectorAll('.tab-button');
+    const iframes={student:document.getElementById('student'), admin:document.getElementById('admin')};
+    tabButtons.forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        tabButtons.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        Object.keys(iframes).forEach(key=>iframes[key].style.display=(key===btn.dataset.target?'block':'none'));
+      });
+    });
+  </script>
+</body>
+</html>
