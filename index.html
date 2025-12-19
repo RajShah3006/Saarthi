@@ -515,7 +515,7 @@
         });
         setTimeout(()=>{ iframe.style.opacity=1; iframe.style.transform='scale(1)'; },1500);
 
-        // BORDER-FOCUSED PARTICLE WAVES
+        // BORDER-FOCUSED PARTICLE WAVES - MORE VISIBLE
         const canvas = document.getElementById('waveCanvas');
         const ctx = canvas.getContext('2d');
         let w, h, particles = [];
@@ -532,63 +532,73 @@
                 this.reset();
             }
             reset() {
-                // Spawn particles near borders (top, bottom, left, right)
+                // Spawn particles near borders
                 const edge = Math.floor(Math.random() * 4);
                 if(edge === 0) { // Top
                     this.x = Math.random() * w;
-                    this.y = Math.random() * h * 0.2;
+                    this.y = Math.random() * h * 0.25;
                 } else if(edge === 1) { // Bottom
                     this.x = Math.random() * w;
-                    this.y = h * 0.8 + Math.random() * h * 0.2;
+                    this.y = h * 0.75 + Math.random() * h * 0.25;
                 } else if(edge === 2) { // Left
-                    this.x = Math.random() * w * 0.15;
+                    this.x = Math.random() * w * 0.2;
                     this.y = Math.random() * h;
                 } else { // Right
-                    this.x = w * 0.85 + Math.random() * w * 0.15;
+                    this.x = w * 0.8 + Math.random() * w * 0.2;
                     this.y = Math.random() * h;
                 }
                 
-                this.z = Math.random() * 2000;
+                this.z = Math.random() * 1500; // Reduced max depth for larger particles
                 this.baseX = this.x;
                 this.baseY = this.y;
-                this.speed = Math.random() * 0.5 + 0.1;
+                this.speed = Math.random() * 0.4 + 0.15;
                 this.color = ['#ec4899', '#6366f1', '#a855f7', '#60a5fa'][Math.floor(Math.random() * 4)];
+                this.brightness = Math.random() * 0.4 + 0.6; // Random brightness
             }
             update(time) {
                 this.z -= this.speed;
                 if(this.z < 1) this.reset();
                 
-                // Wave motion
-                this.x = this.baseX + Math.sin(time * 0.001 + this.baseY * 0.002) * 50;
-                this.y = this.baseY + Math.cos(time * 0.001 + this.baseX * 0.002) * 30;
+                // Stronger wave motion
+                this.x = this.baseX + Math.sin(time * 0.0015 + this.baseY * 0.003) * 70;
+                this.y = this.baseY + Math.cos(time * 0.0015 + this.baseX * 0.003) * 50;
             }
             draw() {
-                const scale = 2000 / this.z;
+                const scale = 1500 / this.z;
                 const x2 = (this.x - w/2) * scale + w/2;
                 const y2 = (this.y - h/2) * scale + h/2;
                 
                 // Only draw if near borders
                 const distFromCenter = Math.sqrt(Math.pow(x2 - w/2, 2) + Math.pow(y2 - h/2, 2));
                 const maxDist = Math.min(w, h) * 0.5;
-                if(distFromCenter < maxDist * 0.4) return; // Skip center particles
+                if(distFromCenter < maxDist * 0.35) return;
                 
-                const size = (1 - this.z / 2000) * 3;
-                const opacity = (1 - this.z / 2000) * 0.8;
+                // Bigger, brighter particles
+                const size = (1 - this.z / 1500) * 5; // Increased from 3 to 5
+                const opacity = (1 - this.z / 1500) * this.brightness; // Use brightness multiplier
+                
+                // Add glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
                 
                 ctx.fillStyle = this.color + Math.floor(opacity * 255).toString(16).padStart(2, '0');
                 ctx.beginPath();
                 ctx.arc(x2, y2, size, 0, Math.PI * 2);
                 ctx.fill();
+                
+                // Reset shadow
+                ctx.shadowBlur = 0;
             }
         }
 
-        // Create particles
-        for(let i = 0; i < 200; i++) {
+        // More particles
+        for(let i = 0; i < 250; i++) {
             particles.push(new Particle());
         }
 
         function animate() {
-            ctx.fillStyle = 'rgba(5, 5, 20, 0.15)';
+            // Less aggressive fade for trail effect
+            ctx.fillStyle = 'rgba(5, 5, 20, 0.08)';
             ctx.fillRect(0, 0, w, h);
             
             const time = Date.now();
@@ -603,4 +613,3 @@
     </script>
 </body>
 </html>
-
