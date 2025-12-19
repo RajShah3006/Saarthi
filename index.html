@@ -288,7 +288,7 @@
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
-            padding-bottom: 60px;
+            padding-bottom: 30px;
         }
 
         /* --- SPACE CABLES --- */
@@ -321,7 +321,6 @@
             height: 100%;
         }
 
-        /* Mask to hide particles in center */
         .canvas-mask {
             position: absolute;
             top: 50%;
@@ -334,7 +333,6 @@
             z-index: -1;
         }
 
-        /* Corner glow orbs - positioned at edges */
         .glow-orb {
             position: absolute;
             border-radius: 50%;
@@ -380,27 +378,24 @@
         }
 
         @keyframes floatOrb {
-            0%, 100% {
-                transform: translate(0, 0) scale(1);
-                opacity: 0.4;
-            }
-            25% {
-                transform: translate(30px, -20px) scale(1.1);
-                opacity: 0.6;
-            }
-            50% {
-                transform: translate(-20px, 30px) scale(0.95);
-                opacity: 0.5;
-            }
-            75% {
-                transform: translate(25px, 15px) scale(1.05);
-                opacity: 0.55;
-            }
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.4; }
+            25% { transform: translate(30px, -20px) scale(1.1); opacity: 0.6; }
+            50% { transform: translate(-20px, 30px) scale(0.95); opacity: 0.5; }
+            75% { transform: translate(25px, 15px) scale(1.05); opacity: 0.55; }
         }
 
         /* --- UI & Glass Panels --- */
-        .glass-panel { background: var(--glass-surface); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border:1px solid var(--glass-border); box-shadow:0 8px 32px 0 rgba(0,0,0,0.37); border-top:1px solid var(--glass-highlight); border-left:1px solid var(--glass-highlight); }
+        .glass-panel { 
+            background: var(--glass-surface); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px); 
+            border: 1px solid var(--glass-border); 
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); 
+            border-top: 1px solid var(--glass-highlight); 
+            border-left: 1px solid var(--glass-highlight); 
+        }
 
+        /* Header with top-right credits */
         header { 
             margin-top: 30px; 
             padding: 15px 50px; 
@@ -412,16 +407,67 @@
             align-items: center; 
             gap: 6px; 
             max-width: 800px; 
-            animation: fadeDown 1s ease-out; 
+            animation: fadeDown 1s ease-out;
+            position: relative;
+            width: 90%;
+        }
+
+        /* Top-right credit badge */
+        .credit-badge {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.75rem;
+            padding: 6px 16px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .credit-badge:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(99, 102, 241, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .credit-badge a {
+            color: #93c5fd;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .credit-badge a:hover {
+            color: #dbeafe;
+        }
+
+        .credit-separator {
+            color: rgba(255, 255, 255, 0.3);
         }
         
-        .badge { font-family:'Space Grotesk',sans-serif; font-size:0.7rem; text-transform:uppercase; letter-spacing:2px; padding:4px 12px; border-radius:20px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#e0e7ff; }
+        .badge { 
+            font-family: 'Space Grotesk', sans-serif; 
+            font-size: 0.7rem; 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            background: rgba(255, 255, 255, 0.1); 
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            color: #e0e7ff; 
+        }
         
         h1 { 
-            font-family:'Outfit',sans-serif; 
+            font-family: 'Outfit', sans-serif; 
             font-size: 3.2rem; 
             margin: 0; 
-            background: linear-gradient(180deg,#fff 0%,#a5b4fc 100%); 
+            background: linear-gradient(180deg, #fff 0%, #a5b4fc 100%); 
             -webkit-background-clip: text; 
             -webkit-text-fill-color: transparent; 
             text-shadow: 0 0 40px rgba(165,180,252,0.2);
@@ -430,24 +476,63 @@
         
         .subtitle { 
             font-size: 1rem; 
-            color: rgba(255,255,255,0.7); 
+            color: rgba(255, 255, 255, 0.7); 
             font-weight: 300; 
             min-height: 22px; 
         }
         
-        .typewriter-text { color:#c084fc; font-family:'JetBrains Mono',monospace; font-weight:500; text-shadow:0 0 10px rgba(192,132,252,0.4);}
-        .cursor { display:inline-block; width:2px; background-color:#c084fc; animation: blink 1s infinite; }
-        @keyframes blink {0%,100%{opacity:1;}50%{opacity:0;}}
+        .typewriter-text { 
+            color: #c084fc; 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 500; 
+            text-shadow: 0 0 10px rgba(192,132,252,0.4);
+        }
 
-        .main-stage { width:95%; max-width:1300px; height:75vh; margin:25px 0; border-radius:30px; overflow:hidden; position:relative; }
-        iframe { width:100%; height:100%; border:none; opacity:0; transform:scale(0.95); transition: opacity 0.8s ease, transform 0.8s ease; }
+        .cursor { 
+            display: inline-block; 
+            width: 2px; 
+            background-color: #c084fc; 
+            animation: blink 1s infinite; 
+        }
 
-        footer { margin-top:10px; padding:15px 40px; border-radius:20px; font-size:0.85rem; color:rgba(255,255,255,0.6); display:flex; gap:20px; align-items:center; z-index:10;}
-        footer a { color:white; text-decoration:none; opacity:0.7; transition:0.2s;}
-        footer a:hover { opacity:1; text-decoration:underline;}
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-        @keyframes fadeDown { from{opacity:0; transform:translateY(-30px);} to{opacity:1; transform:translateY(0);} }
-        @media (max-width:768px){ h1{font-size:2.2rem;} .cables-container{display:none;} }
+        /* Taller Gradio stage */
+        .main-stage { 
+            width: 95%; 
+            max-width: 1300px; 
+            height: 82vh; /* Increased from 75vh */
+            margin: 20px 0 0 0; /* Reduced top/bottom margins */
+            border-radius: 30px; 
+            overflow: hidden; 
+            position: relative; 
+        }
+
+        iframe { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            opacity: 0; 
+            transform: scale(0.95); 
+            transition: opacity 0.8s ease, transform 0.8s ease; 
+        }
+
+        @keyframes fadeDown { 
+            from { opacity: 0; transform: translateY(-30px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+
+        @media (max-width: 768px) { 
+            h1 { font-size: 2.2rem; } 
+            .cables-container { display: none; }
+            .credit-badge {
+                position: static;
+                margin-top: 10px;
+            }
+            header {
+                padding: 15px 20px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -471,6 +556,13 @@
     </div>
 
     <header class="glass-panel">
+        <!-- Credit badge moved to top-right corner -->
+        <div class="credit-badge">
+            <span>Built by Raj Shah</span>
+            <span class="credit-separator">•</span>
+            <a href="https://github.com/RajShah3006" target="_blank">GitHub</a>
+        </div>
+
         <div class="badge">Version 2.0 • Live Data</div>
         <h1>Saarthi AI 🏹</h1>
         <div class="subtitle">
@@ -481,12 +573,6 @@
     <div class="main-stage glass-panel">
         <iframe id="gradio-frame" src="https://rajshah13-saarthi.hf.space" allowtransparency="true"></iframe>
     </div>
-
-    <footer class="glass-panel">
-        <span>Built by Raj Shah</span>
-        <span>•</span>
-        <a href="https://github.com/RajShah3006">GitHub</a>
-    </footer>
 
     <script>
         // Typewriter
@@ -515,7 +601,7 @@
         });
         setTimeout(()=>{ iframe.style.opacity=1; iframe.style.transform='scale(1)'; },1500);
 
-        // BORDER-FOCUSED PARTICLE WAVES - MORE VISIBLE
+        // BORDER-FOCUSED PARTICLE WAVES
         const canvas = document.getElementById('waveCanvas');
         const ctx = canvas.getContext('2d');
         let w, h, particles = [];
@@ -532,34 +618,32 @@
                 this.reset();
             }
             reset() {
-                // Spawn particles near borders
                 const edge = Math.floor(Math.random() * 4);
-                if(edge === 0) { // Top
+                if(edge === 0) { 
                     this.x = Math.random() * w;
                     this.y = Math.random() * h * 0.25;
-                } else if(edge === 1) { // Bottom
+                } else if(edge === 1) { 
                     this.x = Math.random() * w;
                     this.y = h * 0.75 + Math.random() * h * 0.25;
-                } else if(edge === 2) { // Left
+                } else if(edge === 2) { 
                     this.x = Math.random() * w * 0.2;
                     this.y = Math.random() * h;
-                } else { // Right
+                } else { 
                     this.x = w * 0.8 + Math.random() * w * 0.2;
                     this.y = Math.random() * h;
                 }
                 
-                this.z = Math.random() * 1500; // Reduced max depth for larger particles
+                this.z = Math.random() * 1500;
                 this.baseX = this.x;
                 this.baseY = this.y;
                 this.speed = Math.random() * 0.4 + 0.15;
                 this.color = ['#ec4899', '#6366f1', '#a855f7', '#60a5fa'][Math.floor(Math.random() * 4)];
-                this.brightness = Math.random() * 0.4 + 0.6; // Random brightness
+                this.brightness = Math.random() * 0.4 + 0.6;
             }
             update(time) {
                 this.z -= this.speed;
                 if(this.z < 1) this.reset();
                 
-                // Stronger wave motion
                 this.x = this.baseX + Math.sin(time * 0.0015 + this.baseY * 0.003) * 70;
                 this.y = this.baseY + Math.cos(time * 0.0015 + this.baseX * 0.003) * 50;
             }
@@ -568,16 +652,13 @@
                 const x2 = (this.x - w/2) * scale + w/2;
                 const y2 = (this.y - h/2) * scale + h/2;
                 
-                // Only draw if near borders
                 const distFromCenter = Math.sqrt(Math.pow(x2 - w/2, 2) + Math.pow(y2 - h/2, 2));
                 const maxDist = Math.min(w, h) * 0.5;
                 if(distFromCenter < maxDist * 0.35) return;
                 
-                // Bigger, brighter particles
-                const size = (1 - this.z / 1500) * 5; // Increased from 3 to 5
-                const opacity = (1 - this.z / 1500) * this.brightness; // Use brightness multiplier
+                const size = (1 - this.z / 1500) * 5;
+                const opacity = (1 - this.z / 1500) * this.brightness;
                 
-                // Add glow effect
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = this.color;
                 
@@ -586,18 +667,15 @@
                 ctx.arc(x2, y2, size, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Reset shadow
                 ctx.shadowBlur = 0;
             }
         }
 
-        // More particles
         for(let i = 0; i < 250; i++) {
             particles.push(new Particle());
         }
 
         function animate() {
-            // Less aggressive fade for trail effect
             ctx.fillStyle = 'rgba(5, 5, 20, 0.08)';
             ctx.fillRect(0, 0, w, h);
             
@@ -613,3 +691,4 @@
     </script>
 </body>
 </html>
+
