@@ -395,31 +395,63 @@
             border-left: 1px solid var(--glass-highlight); 
         }
 
-        /* Header - Even Shorter and More Stretched */
+        /* Header - Super Compact with Badges on Both Sides */
         header { 
             margin-top: 25px; 
-            padding: 8px 70px; /* Reduced from 12px to 8px, increased horizontal */
-            border-radius: 60px; /* More pill-shaped */
+            padding: 6px 70px;
+            border-radius: 60px;
             text-align: center; 
             z-index: 10; 
             display: flex; 
-            flex-direction: column; 
+            flex-direction: row;
             align-items: center; 
-            gap: 2px; /* Reduced from 4px to 2px */
-            max-width: 1200px; /* Increased from 1100px */
+            justify-content: center;
+            gap: 20px;
+            max-width: 1200px;
             animation: fadeDown 1s ease-out;
             position: relative;
-            width: 94%; /* Increased from 92% */
+            width: 94%;
         }
 
-        /* Top-right credit badge */
+        /* Center content wrapper */
+        .header-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        /* Version badge - Left side */
+        .version-badge {
+            position: absolute;
+            left: 25px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #a5b4fc;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .version-badge:hover {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: rgba(99, 102, 241, 0.5);
+            transform: translateY(-2px);
+        }
+
+        /* Credit badge - Right side */
         .credit-badge {
             position: absolute;
-            top: 8px; /* Adjusted for shorter header */
-            right: 30px;
+            right: 25px;
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.7rem; /* Slightly smaller */
-            padding: 5px 14px; /* Smaller padding */
+            font-size: 0.7rem;
+            padding: 4px 14px;
             border-radius: 20px;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.15);
@@ -429,6 +461,7 @@
             align-items: center;
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
+            white-space: nowrap;
         }
 
         .credit-badge:hover {
@@ -451,35 +484,23 @@
             color: rgba(255, 255, 255, 0.3);
         }
         
-        .badge { 
-            font-family: 'Space Grotesk', sans-serif; 
-            font-size: 0.65rem; /* Slightly smaller */
-            text-transform: uppercase; 
-            letter-spacing: 2px; 
-            padding: 3px 10px; /* Reduced padding */
-            border-radius: 20px; 
-            background: rgba(255, 255, 255, 0.1); 
-            border: 1px solid rgba(255, 255, 255, 0.2); 
-            color: #e0e7ff; 
-        }
-        
         h1 { 
             font-family: 'Outfit', sans-serif; 
-            font-size: 2.6rem; /* Reduced from 2.8rem */
+            font-size: 2.4rem;
             margin: 0; 
             background: linear-gradient(180deg, #fff 0%, #a5b4fc 100%); 
             -webkit-background-clip: text; 
             -webkit-text-fill-color: transparent; 
             text-shadow: 0 0 40px rgba(165,180,252,0.2);
-            line-height: 0.95; /* Even tighter */
-            letter-spacing: 1px; /* More letter spacing for stretch */
+            line-height: 0.9;
+            letter-spacing: 1px;
         }
         
         .subtitle { 
-            font-size: 0.95rem; /* Slightly smaller */
+            font-size: 0.9rem;
             color: rgba(255, 255, 255, 0.7); 
             font-weight: 300; 
-            min-height: 20px; /* Reduced from 22px */
+            min-height: 18px;
         }
         
         .typewriter-text { 
@@ -526,12 +547,13 @@
         @media (max-width: 768px) { 
             h1 { font-size: 1.8rem; } 
             .cables-container { display: none; }
-            .credit-badge {
-                position: static;
-                margin-top: 10px;
-            }
             header {
+                flex-direction: column;
                 padding: 12px 20px;
+                gap: 8px;
+            }
+            .version-badge, .credit-badge {
+                position: static;
             }
         }
     </style>
@@ -557,17 +579,22 @@
     </div>
 
     <header class="glass-panel">
-        <!-- Credit badge moved to top-right corner -->
+        <!-- Version badge on left -->
+        <div class="version-badge">Version 2.0 • Live Data</div>
+
+        <!-- Center content -->
+        <div class="header-center">
+            <h1>Saarthi AI 🏹</h1>
+            <div class="subtitle">
+                Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
+            </div>
+        </div>
+
+        <!-- Credit badge on right -->
         <div class="credit-badge">
             <span>Built by Raj Shah</span>
             <span class="credit-separator">•</span>
             <a href="https://github.com/RajShah3006" target="_blank">GitHub</a>
-        </div>
-
-        <div class="badge">Version 2.0 • Live Data</div>
-        <h1>Saarthi AI 🏹</h1>
-        <div class="subtitle">
-            Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
         </div>
     </header>
 
@@ -602,10 +629,11 @@
         });
         setTimeout(()=>{ iframe.style.opacity=1; iframe.style.transform='scale(1)'; },1500);
 
-        // BORDER-FOCUSED PARTICLE WAVES
+        // ENHANCED PARTICLE WAVES - Fewer particles, more active, 10s trails
         const canvas = document.getElementById('waveCanvas');
         const ctx = canvas.getContext('2d');
         let w, h, particles = [];
+        let lastClearTime = Date.now();
 
         function resize() {
             w = canvas.width = window.innerWidth;
@@ -634,22 +662,23 @@
                     this.y = Math.random() * h;
                 }
                 
-                this.z = Math.random() * 1500;
+                this.z = Math.random() * 1200; // Closer for bigger particles
                 this.baseX = this.x;
                 this.baseY = this.y;
-                this.speed = Math.random() * 0.4 + 0.15;
+                this.speed = Math.random() * 0.8 + 0.5; // Faster (was 0.4 + 0.15)
                 this.color = ['#ec4899', '#6366f1', '#a855f7', '#60a5fa'][Math.floor(Math.random() * 4)];
-                this.brightness = Math.random() * 0.4 + 0.6;
+                this.brightness = Math.random() * 0.3 + 0.7; // Brighter
             }
             update(time) {
                 this.z -= this.speed;
                 if(this.z < 1) this.reset();
                 
-                this.x = this.baseX + Math.sin(time * 0.0015 + this.baseY * 0.003) * 70;
-                this.y = this.baseY + Math.cos(time * 0.0015 + this.baseX * 0.003) * 50;
+                // More aggressive wave motion
+                this.x = this.baseX + Math.sin(time * 0.003 + this.baseY * 0.005) * 100; // Increased
+                this.y = this.baseY + Math.cos(time * 0.003 + this.baseX * 0.005) * 80; // Increased
             }
             draw() {
-                const scale = 1500 / this.z;
+                const scale = 1200 / this.z;
                 const x2 = (this.x - w/2) * scale + w/2;
                 const y2 = (this.y - h/2) * scale + h/2;
                 
@@ -657,10 +686,11 @@
                 const maxDist = Math.min(w, h) * 0.5;
                 if(distFromCenter < maxDist * 0.35) return;
                 
-                const size = (1 - this.z / 1500) * 5;
-                const opacity = (1 - this.z / 1500) * this.brightness;
+                const size = (1 - this.z / 1200) * 6; // Bigger particles
+                const opacity = (1 - this.z / 1200) * this.brightness;
                 
-                ctx.shadowBlur = 15;
+                // Stronger glow
+                ctx.shadowBlur = 20;
                 ctx.shadowColor = this.color;
                 
                 ctx.fillStyle = this.color + Math.floor(opacity * 255).toString(16).padStart(2, '0');
@@ -672,13 +702,26 @@
             }
         }
 
-        for(let i = 0; i < 250; i++) {
+        // Reduced particle count from 250 to 100
+        for(let i = 0; i < 100; i++) {
             particles.push(new Particle());
         }
 
         function animate() {
-            ctx.fillStyle = 'rgba(5, 5, 20, 0.08)';
+            const currentTime = Date.now();
+            
+            // Slow fade for 10-second trails
+            // 10 seconds = 10000ms, 60fps = 600 frames
+            // opacity fade per frame = 1 / 600 ≈ 0.00167
+            ctx.fillStyle = 'rgba(5, 5, 20, 0.001)'; // Much slower fade
             ctx.fillRect(0, 0, w, h);
+            
+            // Clear completely every 10 seconds to prevent buildup
+            if(currentTime - lastClearTime > 10000) {
+                ctx.fillStyle = '#050514';
+                ctx.fillRect(0, 0, w, h);
+                lastClearTime = currentTime;
+            }
             
             const time = Date.now();
             particles.forEach(p => {
