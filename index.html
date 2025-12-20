@@ -395,37 +395,37 @@
             border-left: 1px solid var(--glass-highlight); 
         }
 
-        /* Header with top-right credits */
+        /* Header - Even Shorter and More Stretched */
         header { 
-            margin-top: 30px; 
-            padding: 15px 50px; 
-            border-radius: 40px; 
+            margin-top: 25px; 
+            padding: 8px 70px; /* Reduced from 12px to 8px, increased horizontal */
+            border-radius: 60px; /* More pill-shaped */
             text-align: center; 
             z-index: 10; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            gap: 6px; 
-            max-width: 800px; 
+            gap: 2px; /* Reduced from 4px to 2px */
+            max-width: 1200px; /* Increased from 1100px */
             animation: fadeDown 1s ease-out;
             position: relative;
-            width: 90%;
+            width: 94%; /* Increased from 92% */
         }
 
         /* Top-right credit badge */
         .credit-badge {
             position: absolute;
-            top: 15px;
-            right: 20px;
+            top: 8px; /* Adjusted for shorter header */
+            right: 30px;
             font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.75rem;
-            padding: 6px 16px;
+            font-size: 0.7rem; /* Slightly smaller */
+            padding: 5px 14px; /* Smaller padding */
             border-radius: 20px;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.15);
             color: rgba(255, 255, 255, 0.8);
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
@@ -453,10 +453,10 @@
         
         .badge { 
             font-family: 'Space Grotesk', sans-serif; 
-            font-size: 0.7rem; 
+            font-size: 0.65rem; /* Slightly smaller */
             text-transform: uppercase; 
             letter-spacing: 2px; 
-            padding: 4px 12px; 
+            padding: 3px 10px; /* Reduced padding */
             border-radius: 20px; 
             background: rgba(255, 255, 255, 0.1); 
             border: 1px solid rgba(255, 255, 255, 0.2); 
@@ -465,20 +465,21 @@
         
         h1 { 
             font-family: 'Outfit', sans-serif; 
-            font-size: 3.2rem; 
+            font-size: 2.6rem; /* Reduced from 2.8rem */
             margin: 0; 
             background: linear-gradient(180deg, #fff 0%, #a5b4fc 100%); 
             -webkit-background-clip: text; 
             -webkit-text-fill-color: transparent; 
             text-shadow: 0 0 40px rgba(165,180,252,0.2);
-            line-height: 1.1;
+            line-height: 0.95; /* Even tighter */
+            letter-spacing: 1px; /* More letter spacing for stretch */
         }
         
         .subtitle { 
-            font-size: 1rem; 
+            font-size: 0.95rem; /* Slightly smaller */
             color: rgba(255, 255, 255, 0.7); 
             font-weight: 300; 
-            min-height: 22px; 
+            min-height: 20px; /* Reduced from 22px */
         }
         
         .typewriter-text { 
@@ -501,8 +502,8 @@
         .main-stage { 
             width: 95%; 
             max-width: 1300px; 
-            height: 82vh; /* Increased from 75vh */
-            margin: 20px 0 0 0; /* Reduced top/bottom margins */
+            height: 82vh;
+            margin: 20px 0 0 0;
             border-radius: 30px; 
             overflow: hidden; 
             position: relative; 
@@ -523,14 +524,14 @@
         }
 
         @media (max-width: 768px) { 
-            h1 { font-size: 2.2rem; } 
+            h1 { font-size: 1.8rem; } 
             .cables-container { display: none; }
             .credit-badge {
                 position: static;
                 margin-top: 10px;
             }
             header {
-                padding: 15px 20px;
+                padding: 12px 20px;
             }
         }
     </style>
@@ -691,4 +692,3 @@
     </script>
 </body>
 </html>
-
