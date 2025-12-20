@@ -19,6 +19,8 @@
             --secondary-swirl: #a855f7;
             --tertiary-swirl: #ec4899;
             --cable-color: rgba(99, 102, 241, 0.15);
+            --container-width: 95%;
+            --container-max-width: 1300px;
         }
 
         body {
@@ -32,7 +34,7 @@
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
-            padding-bottom: 10px; /* Reduced from 30px to 10px (20px shorter) */
+            padding-bottom: 0px; /* Removed bottom padding completely */
         }
 
         /* --- SPACE CABLES --- */
@@ -139,10 +141,10 @@
             border-left: 1px solid var(--glass-highlight); 
         }
 
-        /* Header - Matches Gradio width */
+        /* Header - Exactly matches Gradio width */
         header { 
             margin-top: 25px; 
-            padding: 6px 70px;
+            padding: 6px 50px; /* Reduced horizontal padding */
             border-radius: 60px;
             text-align: center; 
             z-index: 10; 
@@ -151,8 +153,9 @@
             align-items: center; 
             justify-content: center;
             gap: 20px;
-            width: 95%; /* Same as Gradio */
-            max-width: 1300px; /* Same as Gradio */
+            width: var(--container-width); /* Same as Gradio */
+            max-width: var(--container-max-width); /* Same as Gradio */
+            box-sizing: border-box; /* Include padding in width calculation */
             animation: fadeDown 1s ease-out;
             position: relative;
         }
@@ -163,12 +166,13 @@
             flex-direction: column;
             align-items: center;
             gap: 2px;
+            flex: 1;
         }
 
         /* Version badge - Left side */
         .version-badge {
             position: absolute;
-            left: 25px;
+            left: 20px;
             font-family: 'Space Grotesk', sans-serif;
             font-size: 0.65rem;
             text-transform: uppercase;
@@ -192,7 +196,7 @@
         /* Credit badge - Right side */
         .credit-badge {
             position: absolute;
-            right: 25px;
+            right: 20px;
             font-family: 'Space Grotesk', sans-serif;
             font-size: 0.7rem;
             padding: 4px 14px;
@@ -263,12 +267,12 @@
 
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-        /* Taller Gradio stage */
+        /* Gradio stage - using CSS variables */
         .main-stage { 
-            width: 95%; 
-            max-width: 1300px; 
+            width: var(--container-width); 
+            max-width: var(--container-max-width); 
             height: 82vh;
-            margin: 20px 0 0 0;
+            margin: 20px 0 10px 0; /* Added 10px bottom margin */
             border-radius: 30px; 
             overflow: hidden; 
             position: relative; 
@@ -472,4 +476,3 @@
     </script>
 </body>
 </html>
-
