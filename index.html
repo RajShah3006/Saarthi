@@ -1,259 +1,3 @@
-<!--
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saarthi AI 🏹| Your Personal Guide</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@700;800&family=Space+Grotesk:wght@300;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-
-    <style>
-        :root {
-            --bg-color: #050505;
-            --glass-surface: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-highlight: rgba(255, 255, 255, 0.15);
-            --primary-swirl: #6366f1;
-            --secondary-swirl: #a855f7;
-            --tertiary-swirl: #ec4899;
-            --cable-color: rgba(99, 102, 241, 0.15);
-        }
-
-        /* --- 1. BASE STYLES --- */
-        body {
-            margin: 0;
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            padding-bottom: 120px; /* ADDED: Extra gap at bottom */
-        }
-
-        /* --- 2. SPACE CABLES (New!) --- */
-        .cables-container {
-            position: fixed;
-            top: 0; bottom: 0;
-            width: 120px; /* Width of the cable tracks */
-            z-index: -1;
-            pointer-events: none;
-        }
-        
-        .cables-left {
-            left: 0;
-            border-right: 1px solid var(--cable-color);
-            /* Create vertical lines using gradients */
-            background: repeating-linear-gradient(
-                90deg,
-                transparent,
-                transparent 39px,
-                var(--cable-color) 40px,
-                transparent 41px
-            );
-            /* Glow Effect */
-            box-shadow: inset -10px 0 30px -10px rgba(99, 102, 241, 0.1);
-        }
-
-        .cables-right {
-            right: 0;
-            border-left: 1px solid var(--cable-color);
-            background: repeating-linear-gradient(
-                90deg,
-                transparent,
-                transparent 39px,
-                var(--cable-color) 40px,
-                transparent 41px
-            );
-            box-shadow: inset 10px 0 30px -10px rgba(99, 102, 241, 0.1);
-        }
-
-        /* Data Pulse Animation (The little light traveling down) */
-        .data-pulse {
-            position: absolute;
-            top: -10%; left: 40px; /* Aligned with one of the grid lines */
-            width: 2px; height: 100px;
-            background: linear-gradient(to bottom, transparent, #818cf8, transparent);
-            animation: pulseDrop 8s infinite cubic-bezier(0.4, 0, 0.2, 1);
-            opacity: 0.7;
-        }
-        
-        /* A second pulse at a different speed */
-        .data-pulse.delayed {
-            left: 80px;
-            animation-delay: 4s;
-            height: 150px;
-            background: linear-gradient(to bottom, transparent, #c084fc, transparent);
-        }
-
-        @keyframes pulseDrop {
-            0% { top: -20%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { top: 120%; opacity: 0; }
-        }
-
-        /* --- 3. BACKGROUND SWIRLS --- */
-        .swirl-container {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -2; overflow: hidden; background: #000;
-        }
-
-        .swirl-1 {
-            position: absolute; top: -20%; left: -20%; width: 80vw; height: 80vw;
-            background: conic-gradient(from 0deg, var(--primary-swirl), transparent 40%, var(--secondary-swirl), transparent 70%, var(--primary-swirl));
-            filter: blur(80px); opacity: 0.4; animation: spin 20s linear infinite; border-radius: 40%;
-        }
-
-        .swirl-2 {
-            position: absolute; bottom: -10%; right: -10%; width: 60vw; height: 60vw;
-            background: radial-gradient(circle, var(--tertiary-swirl), transparent 70%);
-            filter: blur(100px); opacity: 0.3; animation: breathe 8s ease-in-out infinite;
-        }
-
-        @keyframes spin { 0% { transform: rotate(0deg) scale(1); } 100% { transform: rotate(360deg) scale(1); } }
-        @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.2); opacity: 0.5; } }
-
-        /* --- 4. UI COMPONENTS --- */
-        .glass-panel {
-            background: var(--glass-surface);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            border-top: 1px solid var(--glass-highlight); border-left: 1px solid var(--glass-highlight);
-        }
-
-        header {
-            margin-top: 60px; padding: 25px 60px; border-radius: 50px;
-            text-align: center; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px;
-            max-width: 800px; animation: fadeDown 1s ease-out;
-        }
-
-        .badge {
-            font-family: 'Space Grotesk', sans-serif; font-size: 0.75rem; text-transform: uppercase;
-            letter-spacing: 2px; padding: 5px 15px; border-radius: 20px;
-            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e7ff;
-        }
-
-        h1 {
-            font-family: 'Outfit', sans-serif; font-size: 4rem; margin: 0;
-            background: linear-gradient(180deg, #ffffff 0%, #a5b4fc 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 40px rgba(165, 180, 252, 0.2);
-        }
-
-        .subtitle { font-size: 1.1rem; color: rgba(255,255,255,0.7); font-weight: 300; min-height: 24px; }
-        .typewriter-text { color: #c084fc; font-family: 'JetBrains Mono', monospace; font-weight: 500; text-shadow: 0 0 10px rgba(192, 132, 252, 0.4); }
-        .cursor { display: inline-block; width: 2px; background-color: #c084fc; animation: blink 1s infinite; }
-        
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
-        .main-stage {
-            width: 95%; max-width: 1300px; height: 80vh;
-            margin: 40px 0; border-radius: 30px; overflow: hidden; position: relative;
-            animation: scaleUp 0.8s ease-out 0.2s backwards;
-        }
-
-        iframe { width: 100%; height: 100%; border: none; }
-
-        footer {
-            margin-top: 20px; /* Added spacing */
-            padding: 15px 40px; border-radius: 20px; font-size: 0.85rem; color: rgba(255, 255, 255, 0.6);
-            display: flex; gap: 20px; align-items: center; z-index: 10;
-        }
-        footer a { color: white; text-decoration: none; opacity: 0.7; transition: 0.2s; }
-        footer a:hover { opacity: 1; text-decoration: underline; }
-
-        @keyframes fadeDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-
-        @media (max-width: 768px) {
-            h1 { font-size: 2.5rem; }
-            .cables-container { display: none; } /* Hide cables on mobile for space */
-        }
-    </style>
-</head>
-<body>
-
-    <div class="swirl-container">
-        <div class="swirl-1"></div>
-        <div class="swirl-2"></div>
-    </div>
-
-    <div class="cables-container cables-left">
-        <div class="data-pulse"></div>
-        <div class="data-pulse delayed"></div>
-    </div>
-
-    <div class="cables-container cables-right">
-        <div class="data-pulse"></div>
-        <div class="data-pulse delayed"></div>
-    </div>
-
-    <header class="glass-panel">
-        <div class="badge">Version 2.0 • Live Data</div>
-        <h1>Saarthi AI 🏹</h1>
-        <div class="subtitle">
-            Your guide for <span id="typing" class="typewriter-text"></span><span class="cursor">|</span>
-        </div>
-    </header>
-
-    <div class="main-stage glass-panel">
-        <iframe 
-            src="https://rajshah13-saarthi.hf.space"
-            style="background: transparent;" 
-            allowtransparency="true"
-            frameborder="0"
-            width="100%" 
-            height="100%">
-        </iframe>
-    </div>
-
-    <footer class="glass-panel">
-        <span>Built by Raj Shah</span>
-        <span>•</span>
-        <a href="https://github.com/RajShah3006">GitHub</a>
-    </footer>
-
-    <script>
-        const textElement = document.getElementById('typing');
-        const phrases = ["Engineering.", "Computer Science.", "Health Sciences.", "Business.", "Your Future."];
-        let phraseIndex = 0;
-        let charIndex = 0;
-        let isDeleting = false;
-
-        function type() {
-            const currentPhrase = phrases[phraseIndex];
-            if (isDeleting) {
-                textElement.textContent = currentPhrase.substring(0, charIndex - 1);
-                charIndex--;
-            } else {
-                textElement.textContent = currentPhrase.substring(0, charIndex + 1);
-                charIndex++;
-            }
-            if (!isDeleting && charIndex === currentPhrase.length) {
-                isDeleting = true;
-                setTimeout(type, 2000);
-            } else if (isDeleting && charIndex === 0) {
-                isDeleting = false;
-                phraseIndex = (phraseIndex + 1) % phrases.length;
-                setTimeout(type, 500);
-            } else {
-                setTimeout(type, isDeleting ? 50 : 100);
-            }
-        }
-        document.addEventListener('DOMContentLoaded', type);
-    </script>
-
-</body>
-</html>
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -288,7 +32,7 @@
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
-            padding-bottom: 30px;
+            padding-bottom: 10px; /* Reduced from 30px to 10px (20px shorter) */
         }
 
         /* --- SPACE CABLES --- */
@@ -395,7 +139,7 @@
             border-left: 1px solid var(--glass-highlight); 
         }
 
-        /* Header - Super Compact with Badges on Both Sides */
+        /* Header - Matches Gradio width */
         header { 
             margin-top: 25px; 
             padding: 6px 70px;
@@ -407,10 +151,10 @@
             align-items: center; 
             justify-content: center;
             gap: 20px;
-            max-width: 1200px;
+            width: 95%; /* Same as Gradio */
+            max-width: 1300px; /* Same as Gradio */
             animation: fadeDown 1s ease-out;
             position: relative;
-            width: 94%;
         }
 
         /* Center content wrapper */
@@ -662,20 +406,19 @@
                     this.y = Math.random() * h;
                 }
                 
-                this.z = Math.random() * 1200; // Closer for bigger particles
+                this.z = Math.random() * 1200;
                 this.baseX = this.x;
                 this.baseY = this.y;
-                this.speed = Math.random() * 0.8 + 0.5; // Faster (was 0.4 + 0.15)
+                this.speed = Math.random() * 0.8 + 0.5;
                 this.color = ['#ec4899', '#6366f1', '#a855f7', '#60a5fa'][Math.floor(Math.random() * 4)];
-                this.brightness = Math.random() * 0.3 + 0.7; // Brighter
+                this.brightness = Math.random() * 0.3 + 0.7;
             }
             update(time) {
                 this.z -= this.speed;
                 if(this.z < 1) this.reset();
                 
-                // More aggressive wave motion
-                this.x = this.baseX + Math.sin(time * 0.003 + this.baseY * 0.005) * 100; // Increased
-                this.y = this.baseY + Math.cos(time * 0.003 + this.baseX * 0.005) * 80; // Increased
+                this.x = this.baseX + Math.sin(time * 0.003 + this.baseY * 0.005) * 100;
+                this.y = this.baseY + Math.cos(time * 0.003 + this.baseX * 0.005) * 80;
             }
             draw() {
                 const scale = 1200 / this.z;
@@ -686,10 +429,9 @@
                 const maxDist = Math.min(w, h) * 0.5;
                 if(distFromCenter < maxDist * 0.35) return;
                 
-                const size = (1 - this.z / 1200) * 6; // Bigger particles
+                const size = (1 - this.z / 1200) * 6;
                 const opacity = (1 - this.z / 1200) * this.brightness;
                 
-                // Stronger glow
                 ctx.shadowBlur = 20;
                 ctx.shadowColor = this.color;
                 
@@ -702,7 +444,6 @@
             }
         }
 
-        // Reduced particle count from 250 to 100
         for(let i = 0; i < 100; i++) {
             particles.push(new Particle());
         }
@@ -710,13 +451,9 @@
         function animate() {
             const currentTime = Date.now();
             
-            // Slow fade for 10-second trails
-            // 10 seconds = 10000ms, 60fps = 600 frames
-            // opacity fade per frame = 1 / 600 ≈ 0.00167
-            ctx.fillStyle = 'rgba(5, 5, 20, 0.001)'; // Much slower fade
+            ctx.fillStyle = 'rgba(5, 5, 20, 0.001)';
             ctx.fillRect(0, 0, w, h);
             
-            // Clear completely every 10 seconds to prevent buildup
             if(currentTime - lastClearTime > 10000) {
                 ctx.fillStyle = '#050514';
                 ctx.fillRect(0, 0, w, h);
@@ -735,3 +472,4 @@
     </script>
 </body>
 </html>
+
