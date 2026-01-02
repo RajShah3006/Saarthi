@@ -85,7 +85,7 @@ def wire_events(components: dict, controllers: Controllers):
     # =====================
 
     # --- Generate Roadmap: update ALL dashboard views ---
-    def generate_and_render(subjects, interests, extracurriculars, average, grade, location, budget, session_id):
+    def generate_and_render(subjects, interests, extracurriculars, average, grade, location, preferences, preferences_free_text, session_id):
         md = controllers.handle_generate_roadmap(
             subjects,
             interests,
@@ -93,7 +93,8 @@ def wire_events(components: dict, controllers: Controllers):
             average,
             grade,
             location,
-            budget,
+            preferences, 
+            preferences_free_text,
             session_id,
         )
         bundle = render_roadmap_bundle(md)
@@ -113,7 +114,8 @@ def wire_events(components: dict, controllers: Controllers):
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["budget_input"],
+            student["preferences"],
+            student["preferences_free_text"],
             session_state,
         ],
         outputs=[
@@ -135,7 +137,8 @@ def wire_events(components: dict, controllers: Controllers):
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["budget_input"],
+            student["preferences"],
+            student["preferences_free_text"],
         ],
     )
 

@@ -121,7 +121,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         average: float,
         grade: str,
         location: str,
-        budget: str,
+        preferences: List[str],
+        preferences_free_text: str,
         session_id: str
     ) -> str:
         """Generate university roadmap - main feature"""
@@ -149,7 +150,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 subjects=subjects or [],
                 extracurriculars=Validators.sanitize_text(extracurriculars, self.config.MAX_INTERESTS_LENGTH),
                 location=Validators.sanitize_text(location, self.config.MAX_LOCATION_LENGTH),
-                budget=budget
+                preferences=preferences or [],
+                preferences_free_text=preferences_free_text
             )
 
             result = self.roadmap_service.generate(profile, session)

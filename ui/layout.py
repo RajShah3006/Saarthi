@@ -13,6 +13,20 @@ COURSES = sorted([
     "World History (CHW3M)", "Law (CLU3M)", "Accounting (BAF3M)",
 ])
 
+PREFERENCE_SUGGESTIONS = sorted([
+    "Co-op / internships",
+    "Scholarships / financial aid",
+    "Hands-on / lab-heavy learning",
+    "Robotics / competitions / clubs",
+    "Strong job outcomes",
+    "Research opportunities",
+    "Small class sizes",
+    "Big-city campus",
+    "Closer to home",
+    "Lower tuition / cost",
+    "Flexible / hybrid options",
+])
+
 
 def create_ui_layout(config: Config) -> dict:
     """Create the complete UI layout and return component references"""
@@ -85,10 +99,22 @@ def create_ui_layout(config: Config) -> dict:
                     elem_classes="glass-input"
                 )
 
-                budget_input = gr.Radio(
-                    choices=["None", "Budget-conscious", "Scholarship-focused"],
-                    value="None",
-                    label="Budget Considerations"
+                preferences = gr.Dropdown(
+                    choices=PREFERENCE_SUGGESTIONS,
+                    value=[],
+                    multiselect=True,
+                    allow_custom_value=True,   # lets them type + press Enter
+                    label="Preferences (optional)",
+                    info="Pick a few or type your own (press Enter).",
+                    # if you use styling hooks in your CSS:
+                    # elem_classes=["saarthi_input"]
+                )
+                
+                preferences_free_text = gr.Textbox(
+                    label="Anything else? (optional)",
+                    placeholder="e.g., “Only Ontario”, “strong mechatronics focus”, “guaranteed co-op”, “close to Toronto”…",
+                    lines=2,
+                    # elem_classes=["saarthi_input"]
                 )
 
                 with gr.Row():
