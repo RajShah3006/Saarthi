@@ -85,7 +85,27 @@ def wire_events(components: dict, controllers: Controllers):
     # =====================
 
     # --- Generate Roadmap: update ALL dashboard views ---
+    def _prefs_to_budget(preferences, preferences_free_text) -> str:
+        """Temporary mapping for backward compatibility.
+
+        Step 2 will remove this and pass preferences properly into the roadmap prompt.
+        """
+        prefs = []
+        if isinstance(preferences, list):
+            prefs.extend([str(p).lower() for p in preferences if p])
+        if preferences_free_text:
+            prefs.append(str(preferences_free_text).lower())
+
+        joined = " ".join(prefs)
+        if "scholar" in joined or "financial" in joined or "aid" in joined:
+            return "Scholarship-focused"
+        if "budget" in joined or "tuition" in joined or "cost" in joined or "cheaper" in joined:
+            return "Budget-conscious"
+        return "None"
+
     def generate_and_render(subjects, interests, extracurriculars, average, grade, location, preferences, preferences_free_text, session_id):
+        budget = _prefs_to_budget(preferences, preferences_free_text)
+
         md = controllers.handle_generate_roadmap(
             subjects,
             interests,
@@ -93,8 +113,7 @@ def wire_events(components: dict, controllers: Controllers):
             average,
             grade,
             location,
-            preferences, 
-            preferences_free_text,
+            budget,
             session_id,
         )
         bundle = render_roadmap_bundle(md)
@@ -114,7 +133,7 @@ def wire_events(components: dict, controllers: Controllers):
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["preferences"],
+            student["preferences_input"],
             student["preferences_free_text"],
             session_state,
         ],
@@ -127,8 +146,20 @@ def wire_events(components: dict, controllers: Controllers):
     )
 
     # --- Clear form ---
+    def clear_form():
+        return (
+            [],         # subjects
+            "",         # interests
+            "",         # extracurriculars
+            85,         # average (default)
+            "Grade 12", # grade (default)
+            "",         # location
+            [],         # preferences
+            "",         # preferences_free_text
+        )
+
     student["clear_btn"].click(
-        fn=controllers.handle_clear_form,
+        fn=clear_form,
         inputs=[],
         outputs=[
             student["subjects_input"],
@@ -137,7 +168,7 @@ def wire_events(components: dict, controllers: Controllers):
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["preferences"],
+            student["preferences_input"],
             student["preferences_free_text"],
         ],
     )

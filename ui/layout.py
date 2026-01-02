@@ -13,20 +13,6 @@ COURSES = sorted([
     "World History (CHW3M)", "Law (CLU3M)", "Accounting (BAF3M)",
 ])
 
-PREFERENCE_SUGGESTIONS = sorted([
-    "Co-op / internships",
-    "Scholarships / financial aid",
-    "Hands-on / lab-heavy learning",
-    "Robotics / competitions / clubs",
-    "Strong job outcomes",
-    "Research opportunities",
-    "Small class sizes",
-    "Big-city campus",
-    "Closer to home",
-    "Lower tuition / cost",
-    "Flexible / hybrid options",
-])
-
 
 def create_ui_layout(config: Config) -> dict:
     """Create the complete UI layout and return component references"""
@@ -99,22 +85,36 @@ def create_ui_layout(config: Config) -> dict:
                     elem_classes="glass-input"
                 )
 
-                preferences = gr.Dropdown(
+                # ✅ Preferences (optional): pick from suggestions OR type your own
+                PREFERENCE_SUGGESTIONS = [
+                    "Co-op / internships",
+                    "Scholarships / financial aid",
+                    "Hands-on / lab-heavy learning",
+                    "Robotics / competitions / clubs",
+                    "Strong job outcomes",
+                    "Research opportunities",
+                    "Small class sizes",
+                    "Big-city campus",
+                    "Closer to home",
+                    "Lower tuition / cost",
+                    "Flexible / hybrid options",
+                ]
+
+                preferences_input = gr.Dropdown(
                     choices=PREFERENCE_SUGGESTIONS,
                     value=[],
                     multiselect=True,
-                    allow_custom_value=True,   # lets them type + press Enter
+                    allow_custom_value=True,  # type custom preference, press Enter
                     label="Preferences (optional)",
                     info="Pick a few or type your own (press Enter).",
-                    # if you use styling hooks in your CSS:
-                    # elem_classes=["saarthi_input"]
+                    elem_classes="glass-input",
                 )
-                
+
                 preferences_free_text = gr.Textbox(
                     label="Anything else? (optional)",
-                    placeholder="e.g., “Only Ontario”, “strong mechatronics focus”, “guaranteed co-op”, “close to Toronto”…",
+                    placeholder="e.g., Only Ontario, close to Toronto, guaranteed co-op, strong mechatronics focus…",
                     lines=2,
-                    # elem_classes=["saarthi_input"]
+                    elem_classes="glass-input",
                 )
 
                 with gr.Row():
@@ -185,11 +185,14 @@ def create_ui_layout(config: Config) -> dict:
             "average_input": average_input,
             "grade_input": grade_input,
             "location_input": location_input,
-            "budget_input": budget_input,
+
+            # ✅ new
+            "preferences_input": preferences_input,
+            "preferences_free_text": preferences_free_text,
+
             "clear_btn": clear_btn,
             "generate_btn": generate_btn,
 
-            # New outputs
             "timeline_display": timeline_display,
             "programs_display": programs_display,
             "checklist_display": checklist_display,
