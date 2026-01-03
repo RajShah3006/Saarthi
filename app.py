@@ -85,7 +85,17 @@ def wire_events(components: dict, controllers: Controllers):
     # =====================
 
     # --- Generate Roadmap: update ALL dashboard views ---
-    def generate_and_render(subjects, interests, extracurriculars, average, grade, location, budget, session_id):
+    def generate_and_render(subjects, interest_tags, interest_details, extracurriculars, average, grade, location, preferences, session_id):
+        tags = [t.strip() for t in (interest_tags or []) if t and t.strip()]
+        details = (interest_details or "").strip()
+    
+        if tags and details:
+            interests = f"{', '.join(tags)}; Details: {details}"
+        elif tags:
+            interests = ", ".join(tags)
+        else:
+            interests = details  # validator will catch empty
+    
         md = controllers.handle_generate_roadmap(
             subjects,
             interests,
@@ -93,7 +103,7 @@ def wire_events(components: dict, controllers: Controllers):
             average,
             grade,
             location,
-            budget,
+            preferences,
             session_id,
         )
         bundle = render_roadmap_bundle(md)
@@ -104,18 +114,21 @@ def wire_events(components: dict, controllers: Controllers):
             bundle["full_md"],
         )
 
+
     student["generate_btn"].click(
         fn=generate_and_render,
         inputs=[
             student["subjects_input"],
-            student["interests_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
             student["extracurriculars_input"],
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["budget_input"],
+            student["preferences_input"],
             session_state,
         ],
+
         outputs=[
             student["timeline_display"],
             student["programs_display"],
@@ -130,12 +143,13 @@ def wire_events(components: dict, controllers: Controllers):
         inputs=[],
         outputs=[
             student["subjects_input"],
-            student["interests_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
             student["extracurriculars_input"],
             student["average_input"],
             student["grade_input"],
             student["location_input"],
-            student["budget_input"],
+            student["preferences_input"],
         ],
     )
 

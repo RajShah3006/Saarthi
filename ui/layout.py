@@ -13,6 +13,11 @@ COURSES = sorted([
     "World History (CHW3M)", "Law (CLU3M)", "Accounting (BAF3M)",
 ])
 
+INTEREST_AREAS = [
+    "Engineering", "Computer Science", "Health Sciences", "Business/Commerce",
+    "Life Sciences", "Physical Sciences", "Math/Statistics", "Social Sciences",
+    "Arts & Design", "Law/Criminology", "Education", "Environment",
+]
 
 def create_ui_layout(config: Config) -> dict:
     """Create the complete UI layout and return component references"""
@@ -45,51 +50,60 @@ def create_ui_layout(config: Config) -> dict:
             with gr.Column(scale=1, min_width=320):
                 gr.Markdown(f"**Status:** {status_text}")
 
-                subjects_input = gr.Dropdown(
-                    choices=COURSES,
-                    multiselect=True,
-                    label="Current/Planned Subjects",
-                    info="Select courses you're taking or plan to take",
-                    elem_classes="glass-input"
-                )
-
-                interests_input = gr.Textbox(
-                    label="Academic Interests *",
-                    placeholder="e.g., Computer Science, Medicine, Business",
-                    info="What fields interest you?",
-                    elem_classes="glass-input",
-                    lines=2
-                )
-
-                extracurriculars_input = gr.Textbox(
-                    label="Extracurricular Activities",
-                    placeholder="e.g., Robotics Club, Debate Team, Volunteering",
-                    elem_classes="glass-input",
-                    lines=2
-                )
-
-                with gr.Row():
-                    average_input = gr.Slider(
-                        minimum=50, maximum=100, value=85, step=1,
-                        label="Current Average %"
-                    )
-                    grade_input = gr.Dropdown(
-                        choices=config.GRADE_OPTIONS,
-                        value="Grade 12",
-                        label="Grade Level"
+                with gr.Accordion("1) Academics", open=True):
+                    subjects_input = gr.Dropdown(
+                        choices=COURSES,
+                        multiselect=True,
+                        label="Current/Planned Subjects",
+                        info="Select courses you're taking or plan to take",
+                        elem_classes="glass-input"
                     )
 
-                location_input = gr.Textbox(
-                    label="Location",
-                    placeholder="e.g., Toronto, ON",
-                    elem_classes="glass-input"
-                )
+                    with gr.Row():
+                        average_input = gr.Slider(
+                            minimum=50, maximum=100, value=85, step=1,
+                            label="Current Average %"
+                        )
+                        grade_input = gr.Dropdown(
+                            choices=config.GRADE_OPTIONS,
+                            value="Grade 12",
+                            label="Grade Level"
+                        )
 
-                budget_input = gr.Radio(
-                    choices=["None", "Budget-conscious", "Scholarship-focused"],
-                    value="None",
-                    label="Budget Considerations"
-                )
+                with gr.Accordion("2) Interests", open=True):
+                    interest_tags_input = gr.CheckboxGroup(
+                        choices=INTEREST_AREAS,
+                        label="Interest Areas *",
+                        info="Pick a few (2–4). If unsure, pick your best guess.",
+                    )
+
+                    interest_details_input = gr.Textbox(
+                        label="Interest Details (optional)",
+                        placeholder="e.g., AI + robotics, neuroscience, entrepreneurship",
+                        elem_classes="glass-input",
+                        lines=2
+                    )
+
+                with gr.Accordion("3) Extras & Preferences", open=False):
+                    extracurriculars_input = gr.Textbox(
+                        label="Extracurricular Activities",
+                        placeholder="e.g., Robotics Club, Debate Team, Volunteering",
+                        elem_classes="glass-input",
+                        lines=2
+                    )
+
+                    location_input = gr.Textbox(
+                        label="Location",
+                        placeholder="e.g., Toronto, ON",
+                        elem_classes="glass-input"
+                    )
+
+                    preferences_input = gr.Textbox(
+                        label="Preferences (optional)",
+                        placeholder="e.g., prefer close to home, scholarship important, smaller campus, etc.",
+                        elem_classes="glass-input",
+                        lines=2
+                    )
 
                 with gr.Row():
                     clear_btn = gr.Button("Clear", elem_classes="secondary-btn")
@@ -140,7 +154,6 @@ def create_ui_layout(config: Config) -> dict:
                             )
                             send_btn = gr.Button("Send", scale=1, elem_classes="secondary-btn")
 
-                # Hidden admin section (unchanged)
                 with gr.Column(visible=False) as admin_section:
                     admin_info = gr.Markdown("")
 
@@ -149,31 +162,33 @@ def create_ui_layout(config: Config) -> dict:
         "login": {
             "section": login_section,
             "name_input": name_input,
-            "start_btn": start_btn
+            "start_btn": start_btn,
         },
         "student": {
             "section": student_section,
+
             "subjects_input": subjects_input,
-            "interests_input": interests_input,
+            "interest_tags_input": interest_tags_input,
+            "interest_details_input": interest_details_input,
             "extracurriculars_input": extracurriculars_input,
             "average_input": average_input,
             "grade_input": grade_input,
             "location_input": location_input,
-            "budget_input": budget_input,
+            "preferences_input": preferences_input,
+
             "clear_btn": clear_btn,
             "generate_btn": generate_btn,
 
-            # New outputs
             "timeline_display": timeline_display,
             "programs_display": programs_display,
             "checklist_display": checklist_display,
             "output_display": output_display,
 
             "followup_input": followup_input,
-            "send_btn": send_btn
+            "send_btn": send_btn,
         },
         "admin": {
             "section": admin_section,
-            "admin_info": admin_info
+            "admin_info": admin_info,
         }
     }

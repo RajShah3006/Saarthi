@@ -124,11 +124,13 @@ class StudentProfile:
     subjects: List[str]
     extracurriculars: str
     location: str
-    budget: str
-    
+    preferences: str  # <-- replaced budget
+
     def to_context_string(self) -> str:
         """Format for prompt context"""
         subjects_str = ", ".join(self.subjects) if self.subjects else "None specified"
+        prefs_str = self.preferences.strip() if self.preferences else "Not specified"
+
         return f"""- Name: {self.name}
 - Grade: {self.grade}
 - Average: {self.average}%
@@ -136,7 +138,7 @@ class StudentProfile:
 - Current Subjects: {subjects_str}
 - Extracurriculars: {self.extracurriculars or 'Not specified'}
 - Location: {self.location or 'Not specified'}
-- Budget: {self.budget}"""
+- Preferences: {prefs_str}"""
 
 
 @dataclass

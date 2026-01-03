@@ -121,7 +121,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         average: float,
         grade: str,
         location: str,
-        budget: str,
+        preferences: str,
         session_id: str
     ) -> str:
         """Generate university roadmap - main feature"""
@@ -129,7 +129,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
             session = self.session_manager.get_session(session_id)
             if not session:
                 return "⚠️ Session expired. Please refresh the page to start a new session."
-
+    
             validation = Validators.validate_profile_inputs(
                 interests=interests,
                 extracurriculars=extracurriculars,
@@ -140,7 +140,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
             )
             if not validation.ok:
                 return f"⚠️ **Validation Error**\n\n{validation.message}"
-
+    
             profile = StudentProfile(
                 name=session.name,
                 grade=grade,
@@ -149,26 +149,23 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 subjects=subjects or [],
                 extracurriculars=Validators.sanitize_text(extracurriculars, self.config.MAX_INTERESTS_LENGTH),
                 location=Validators.sanitize_text(location, self.config.MAX_LOCATION_LENGTH),
-                budget=budget
+                preferences=Validators.sanitize_text(preferences, self.config.MAX_INTERESTS_LENGTH),
             )
-
+    
             result = self.roadmap_service.generate(profile, session)
             if not result.ok:
                 return f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*"
-
-            # Update session context for follow-ups
+    
             session.last_profile = profile
             raw_programs = (result.data or {}).get("programs", [])
             session.last_programs = raw_programs
             session.conversation_summary = f"Generated roadmap for {profile.interests}"
-
-            # Minimize programs (remove embeddings)
+    
             min_programs = [self._minimize_program(p) for p in raw_programs]
             marker = self._build_marker(profile, min_programs)
-
-            # IMPORTANT: append the marker so UI can render Programs tab correctly
+    
             return f"{result.message}\n\n{marker}"
-
+    
         except Exception as e:
             error_id = str(hash(str(e)))[:8]
             logger.error(f"Generate roadmap error [{error_id}]: {e}\n{traceback.format_exc()}")
@@ -177,6 +174,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 "Something went wrong. Please try again.\n\n"
                 f"*Error ID: {error_id}*"
             )
+
 
     def handle_followup(self, question: str, current_output: str, session_id: str) -> Tuple[str, str]:
         """Handle follow-up questions with context"""
@@ -221,10 +219,12 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         """Clear form inputs"""
         return (
             [],         # subjects
-            "",         # interests
+            [],         # interest tags
+            "",         # interest details
             "",         # extracurriculars
             85,         # average (default)
             "Grade 12", # grade (default)
             "",         # location
-            "None"      # budget (default)
+            "",         # preferences
         )
+
