@@ -248,17 +248,11 @@ class RoadmapService:
         """Beautiful formatted output"""
 
         output = f"""
-<div class="roadmap-header">
-
 ## ✨ Your Personalized University Roadmap
-**Interest:** {profile.interests}
-**Grade:** {profile.grade} | **Average:** {profile.average}%
-**Subjects:** {', '.join(profile.subjects[:5]) if profile.subjects else 'Not specified'}
-
-</div>
-
+🎯 Interest: {profile.interests}
+📊 Grade: {profile.grade} | Average: {profile.average}%
+📚 Subjects: {', '.join(profile.subjects[:5]) if profile.subjects else 'Not specified'}
 ---
-
 ## Top Matching Programs
 """
 
@@ -287,25 +281,28 @@ class RoadmapService:
             else:
                 prereqs_display = "Check university website"
 
+            match_percent = int(round(bd["final"] * 100))
+            admission = prog.admission_average or "Check website"
+            
+            missing = bd.get("missing_prereqs", [])
+            missing_line = f"⚠️ Missing: {', '.join(missing)}" if missing else ""
+            
+            prereqs_display = (prog.prerequisites or "").strip()
+            if prereqs_display:
+                prereqs_display = prereqs_display[:150] + ("..." if len(prereqs_display) > 150 else "")
+            else:
+                prereqs_display = "Check university website"
+            
+            coop_line = "✅ Co-op Available" if prog.co_op_available else ""
+            
             output += f"""
-### {i}. {prog.program_name}
-
-**{prog.university_name}** | {match_icon} **{match_text}** ({bd['final']:.0%})
-
-| Metric | Score | Details |
-|--------|-------|---------|
-| Relevance | {bd['relevance']:.0%} | How well it matches your interests |
-| Grade Fit | {bd['grade']:.0%} | {grade_assessment} |
-| Prerequisites | {bd['prereq']:.0%} | Course requirements met |
-| Location | {bd['location'] if isinstance(bd['location'], str) else f"{bd['location']:.0%}"} | Distance preference |
-
-**Admission:** {prog.admission_average or 'Check website'}
-**Prerequisites:** {prereqs_display}{prereq_warning}
-
-{"✅ **Co-op Available**" if prog.co_op_available else ""}
-
-[View Program Details]({prog.program_url})
-
+{i}. {prog.program_name}
+{prog.university_name} | {match_icon} {match_text} ({match_percent}%)
+📝 Admission: {admission}
+📚 Prerequisites: {prereqs_display}
+{missing_line}
+{coop_line}
+🔗 Link: {prog.program_url}
 ---
 """
 
