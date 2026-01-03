@@ -23,7 +23,7 @@ def create_ui_layout(config: Config) -> dict:
     """Create the complete UI layout and return component references"""
 
     session_state = gr.State("")
-    status_text = "" if config.GEMINI_API_KEY else ""
+    status_text = "✅ AI enabled" if config.GEMINI_API_KEY else "Under Maintenance"
 
     # === LOGIN SECTION ===
     with gr.Column(visible=True, elem_classes="glass-panel") as login_section:
@@ -48,7 +48,7 @@ def create_ui_layout(config: Config) -> dict:
         with gr.Row():
             # Left: Form
             with gr.Column(scale=1, min_width=320):
-                gr.Markdown(f"**Status:** {status_text}")
+                gr.HTML(f"<div class='status-badge'>{status_text}</div>")
 
                 with gr.Accordion("1) Academics", open=True):
                     subjects_input = gr.Dropdown(

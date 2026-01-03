@@ -575,6 +575,44 @@ def get_css(config: Config) -> str:
         cursor: pointer;
         transition: all 0.3s ease;
     }
+
+    /* === ACCORDION CHEVRON FIX === */
+    
+    /* remove default marker */
+    .gr-accordion summary::-webkit-details-marker { display: none; }
+    .gr-accordion summary::marker { content: ""; }
+    
+    /* make header layout consistent */
+    .gr-accordion summary{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      list-style: none;
+    }
+    
+    /* custom chevron on the right */
+    .gr-accordion summary::after{
+      content: "▾";
+      opacity: 0.8;
+      transform: rotate(-90deg);
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      font-weight: 800;
+      color: var(--text-secondary);
+    }
+    
+    /* rotate when open */
+    .gr-accordion[open] summary::after{
+      transform: rotate(0deg);
+      opacity: 1;
+      color: var(--neon-cyan);
+    }
+    
+    /* give content some padding */
+    .gr-accordion > div, .gr-accordion .wrap{
+      padding: 12px 16px 16px 16px;
+    }
+
     
     .gr-accordion summary:hover {
         background: rgba(99, 102, 241, 0.1) !important;
