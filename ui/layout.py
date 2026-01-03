@@ -1,208 +1,166 @@
-# ui/layout.py - UI components (Roadmap Dashboard)
-
+# ui/layout.py
 import gradio as gr
-from config import Config
-
-COURSES = sorted([
-    "Advanced Functions (MHF4U)", "Calculus & Vectors (MCV4U)",
-    "Data Management (MDM4U)", "English (ENG4U)",
-    "Biology (SBI4U)", "Chemistry (SCH4U)", "Physics (SPH4U)",
-    "Computer Science (ICS4U)", "Business Leadership (BOH4M)",
-    "Functions (MCR3U)", "English (ENG3U)", "Biology (SBI3U)",
-    "Chemistry (SCH3U)", "Physics (SPH3U)", "Computer Science (ICS3U)",
-    "World History (CHW3M)", "Law (CLU3M)", "Accounting (BAF3M)",
-])
+from config import GRADE_OPTIONS, BUDGET_OPTIONS
+from ui.styles import get_css, get_theme
 
 
-def create_ui_layout(config: Config) -> dict:
-    """Create the complete UI layout and return component references"""
+def create_ui_layout():
+    css = get_css()
+    theme = get_theme()
 
-    session_state = gr.State("")
-    status_text = "" if config.GEMINI_API_KEY else ""
+    with gr.Blocks(theme=theme, css=css) as demo:
+        session_state = gr.State("")
 
-    # === LOGIN SECTION ===
-    with gr.Column(visible=True, elem_classes="glass-panel") as login_section:
-        gr.Markdown("### Welcome!")
-        gr.Markdown("Enter your name to get started with personalized university guidance.")
-
-        name_input = gr.Textbox(
-            label="Your Name",
-            placeholder="Enter your name",
-            elem_classes="glass-input"
+        # Header
+        gr.HTML(
+            """
+            <div class="saarthi-header">
+                <div class="saarthi-title">Saarthi AI 🏹</div>
+                <div class="saarthi-subtitle">Ontario-wide university program roadmap + recommendations</div>
+            </div>
+            """
         )
-        start_btn = gr.Button(
-            "Start Session →",
-            variant="primary",
-            elem_classes="primary-btn"
-        )
-        gr.Markdown("*No account needed - your session data stays in your browser only.*",
-                    elem_classes="hint-text")
 
-    # === STUDENT DASHBOARD ===
-    with gr.Column(visible=False, elem_classes="glass-panel") as student_section:
-        with gr.Row():
-            # Left: Form
-            with gr.Column(scale=1, min_width=320):
-                gr.Markdown(f"**Status:** {status_text}")
-
-                subjects_input = gr.Dropdown(
-                    choices=COURSES,
-                    multiselect=True,
-                    label="Current/Planned Subjects",
-                    info="Select courses you're taking or plan to take",
-                    elem_classes="glass-input"
-                )
-
-                interests_input = gr.Textbox(
-                    label="Academic Interests *",
-                    placeholder="e.g., Computer Science, Medicine, Business",
-                    info="What fields interest you?",
-                    elem_classes="glass-input",
-                    lines=2
-                )
-
-                extracurriculars_input = gr.Textbox(
-                    label="Extracurricular Activities",
-                    placeholder="e.g., Robotics Club, Debate Team, Volunteering",
-                    elem_classes="glass-input",
-                    lines=2
-                )
-
+        # Main Tabs
+        with gr.Tabs(elem_classes="tabs-container"):
+            with gr.Tab("🎯 Roadmap", elem_id="tab-roadmap"):
                 with gr.Row():
-                    average_input = gr.Slider(
-                        minimum=50, maximum=100, value=85, step=1,
-                        label="Current Average %"
-                    )
-                    grade_input = gr.Dropdown(
-                        choices=config.GRADE_OPTIONS,
-                        value="Grade 12",
-                        label="Grade Level"
-                    )
+                    # Left panel - Student Profile Form
+                    with gr.Column(scale=1, elem_classes="glass-card"):
+                        gr.Markdown("## Student Profile")
+                        gr.Markdown("Fill this in to get a personalized roadmap and program suggestions.")
 
-                location_input = gr.Textbox(
-                    label="Location",
-                    placeholder="e.g., Toronto, ON",
-                    elem_classes="glass-input"
-                )
-
-                # ✅ Preferences (optional): pick from suggestions OR type your own
-                PREFERENCE_SUGGESTIONS = [
-                    "Co-op / internships",
-                    "Scholarships / financial aid",
-                    "Hands-on / lab-heavy learning",
-                    "Robotics / competitions / clubs",
-                    "Strong job outcomes",
-                    "Research opportunities",
-                    "Small class sizes",
-                    "Big-city campus",
-                    "Closer to home",
-                    "Lower tuition / cost",
-                    "Flexible / hybrid options",
-                ]
-
-                preferences_input = gr.Dropdown(
-                    choices=PREFERENCE_SUGGESTIONS,
-                    value=[],
-                    multiselect=True,
-                    allow_custom_value=True,  # type custom preference, press Enter
-                    label="Preferences (optional)",
-                    info="Pick a few or type your own (press Enter).",
-                    elem_classes="glass-input",
-                )
-
-                preferences_free_text = gr.Textbox(
-                    label="Anything else? (optional)",
-                    placeholder="e.g., Only Ontario, close to Toronto, guaranteed co-op, strong mechatronics focus…",
-                    lines=2,
-                    elem_classes="glass-input",
-                )
-
-                with gr.Row():
-                    clear_btn = gr.Button("Clear", elem_classes="secondary-btn")
-                    generate_btn = gr.Button(
-                        "Generate Roadmap",
-                        variant="primary",
-                        elem_classes="primary-btn"
-                    )
-
-            # Right: Roadmap Dashboard
-            with gr.Column(scale=2, min_width=520):
-                gr.Markdown("### Your Roadmap Dashboard")
-
-                with gr.Tabs(elem_id="roadmap_tabs"):
-                    with gr.Tab("Roadmap (Timeline)"):
-                        timeline_display = gr.HTML(
-                            "<div class='card-empty'>Fill in your profile and click <b>Generate Roadmap</b>.</div>",
-                            elem_id="timeline_display"
-                        )
-
-                    with gr.Tab("Programs"):
-                        programs_display = gr.HTML(
-                            "<div class='card-empty'>Your recommended programs will appear here as cards.</div>",
-                            elem_id="programs_display"
-                        )
-
-                    with gr.Tab("Checklist"):
-                        checklist_display = gr.HTML(
-                            "<div class='card-empty'>Your action checklist will appear here.</div>",
-                            elem_id="checklist_display"
-                        )
-
-                    with gr.Tab("Full Plan"):
-                        output_display = gr.Markdown(
-                            "Fill in your profile and click **Generate Roadmap** to get started.",
-                            elem_classes="output-box",
-                            elem_id="roadmap_md"
-                        )
-
-                    with gr.Tab("Q&A"):
-                        gr.Markdown("Ask follow-up questions and refine your roadmap.")
-                        with gr.Row():
-                            followup_input = gr.Textbox(
-                                label="Your Question",
-                                placeholder="e.g., Which programs fit my marks best?",
-                                scale=4,
-                                elem_classes="glass-input"
+                        # Inputs
+                        with gr.Group():
+                            subjects_input = gr.CheckboxGroup(
+                                choices=[
+                                    "English (ENG4U)",
+                                    "Advanced Functions (MHF4U)",
+                                    "Calculus & Vectors (MCV4U)",
+                                    "Data Management (MDM4U)",
+                                    "Physics (SPH4U)",
+                                    "Chemistry (SCH4U)",
+                                    "Biology (SBI4U)",
+                                    "Computer Science (ICS4U)",
+                                    "Business (BBB4M)",
+                                    "Other",
+                                ],
+                                label="Current/Planned Grade 12 Subjects",
+                                info="Select all that apply",
                             )
-                            send_btn = gr.Button("Send", scale=1, elem_classes="secondary-btn")
 
-                # Hidden admin section (unchanged)
-                with gr.Column(visible=False) as admin_section:
-                    admin_info = gr.Markdown("")
+                            interests_input = gr.Textbox(
+                                label="What field are you interested in?",
+                                placeholder="e.g., Robotics, Nursing, Business, Computer Science, Trades...",
+                                elem_classes="glass-input",
+                            )
 
-    return {
-        "session_state": session_state,
-        "login": {
-            "section": login_section,
-            "name_input": name_input,
-            "start_btn": start_btn
-        },
-        "student": {
-            "section": student_section,
-            "subjects_input": subjects_input,
-            "interests_input": interests_input,
-            "extracurriculars_input": extracurriculars_input,
-            "average_input": average_input,
-            "grade_input": grade_input,
-            "location_input": location_input,
+                            extracurriculars_input = gr.Textbox(
+                                label="What activities do you enjoy?",
+                                placeholder="e.g., coding club, sports, volunteering, design projects...",
+                                elem_classes="glass-input",
+                            )
 
-            # ✅ new
-            "preferences_input": preferences_input,
-            "preferences_free_text": preferences_free_text,
+                            average_input = gr.Slider(
+                                minimum=50,
+                                maximum=100,
+                                step=1,
+                                value=85,
+                                label="Current Average (%)",
+                                info="Rough estimate is fine",
+                            )
 
-            "clear_btn": clear_btn,
-            "generate_btn": generate_btn,
+                            grade_input = gr.Dropdown(
+                                choices=GRADE_OPTIONS,
+                                value="Grade 12",
+                                label="Current Grade",
+                            )
 
-            "timeline_display": timeline_display,
-            "programs_display": programs_display,
-            "checklist_display": checklist_display,
-            "output_display": output_display,
+                            location_input = gr.Textbox(
+                                label="Preferred Location (optional)",
+                                placeholder="e.g., Toronto, GTA, Ottawa, Anywhere in Ontario",
+                                elem_classes="glass-input",
+                            )
 
-            "followup_input": followup_input,
-            "send_btn": send_btn
-        },
-        "admin": {
-            "section": admin_section,
-            "admin_info": admin_info
+                            # What matters to you? (choose + optional custom)
+                            preferences_input = gr.CheckboxGroup(
+                                choices=[
+                                    "Co-op / internships",
+                                    "Hands-on / project-based learning",
+                                    "Close to home",
+                                    "Top-ranked / prestigious program",
+                                    "Easier admission / safer options",
+                                    "Scholarships / financial aid",
+                                    "Strong campus life",
+                                    "Small class sizes",
+                                    "Urban campus",
+                                    "Research opportunities",
+                                ],
+                                label="What matters most to you?",
+                                info="Pick anything that’s important (you can choose multiple).",
+                            )
+
+                            preferences_other_input = gr.Textbox(
+                                label="Other preferences (optional)",
+                                placeholder="e.g., 'strong robotics club' or 'AI electives' or 'more hands-on labs'",
+                                elem_classes="glass-input",
+                                lines=2,
+                            )
+
+                        # Buttons
+                        with gr.Row():
+                            generate_btn = gr.Button("🚀 Generate My Roadmap", variant="primary")
+                            clear_btn = gr.Button("🧹 Clear", variant="secondary")
+
+                    # Right panel - Output
+                    with gr.Column(scale=2):
+                        roadmap_output = gr.HTML(
+                            value="""
+                            <div class="glass-card">
+                                <h3>Welcome 👋</h3>
+                                <p>Fill out the profile form and click <b>Generate My Roadmap</b> to get:</p>
+                                <ul>
+                                    <li>✅ A personalized roadmap for your field</li>
+                                    <li>🎓 Top Ontario program recommendations</li>
+                                    <li>📋 A checklist of next steps</li>
+                                </ul>
+                            </div>
+                            """
+                        )
+
+                        # Program recommendations
+                        programs_output = gr.HTML()
+
+                        # Checklist
+                        checklist_output = gr.HTML()
+
+                        # Full plan (roadmap + programs + checklist)
+                        full_plan_output = gr.HTML()
+
+                        # Q&A
+                        qa_output = gr.HTML()
+
+        components = {
+            "session_state": session_state,
+            "inputs": {
+                "subjects_input": subjects_input,
+                "interests_input": interests_input,
+                "extracurriculars_input": extracurriculars_input,
+                "average_input": average_input,
+                "grade_input": grade_input,
+                "location_input": location_input,
+                "preferences_input": preferences_input,
+                "preferences_other_input": preferences_other_input,
+                "generate_btn": generate_btn,
+                "clear_btn": clear_btn,
+            },
+            "outputs": {
+                "roadmap_output": roadmap_output,
+                "programs_output": programs_output,
+                "checklist_output": checklist_output,
+                "full_plan_output": full_plan_output,
+                "qa_output": qa_output,
+            },
         }
-    }
+
+    return demo, components

@@ -1,76 +1,20 @@
-# controllers.py - Controller layer for UI events
+# controllers.py
+from typing import Any, Dict, List, Optional, Tuple
 
-import json
-import logging
-from typing import Dict, Any, List, Tuple
-
-from models import StudentProfile
-from session import SessionManager
+from config import Config
+from models import ServiceResult, StudentProfile
+from services.session import SessionManager
 from services.program_search import ProgramSearchService
 from services.roadmap import RoadmapService
-from validators import validate_profile_inputs
-
-logger = logging.getLogger("saarthi.controllers")
+from utils.validators import Validators
 
 
 class Controllers:
-    def __init__(
-        self,
-        session_manager: SessionManager,
-        program_search: ProgramSearchService,
-        roadmap_service: RoadmapService
-    ):
-        self.session_manager = session_manager
-        self.program_search = program_search
-        self.roadmap_service = roadmap_service
-
-    @staticmethod
-    def _minimize_program(program: Dict[str, Any]) -> Dict[str, Any]:
-        """Create minimal program representation for UI embedding"""
-        keep_fields = [
-            "program_name",
-            "university_name",
-            "program_url",
-            "admission_average",
-            "prerequisites",
-            "co_op_available",
-            "match_percent",
-            "missing_prereqs",
-            "grade_assessment",
-            "metrics",
-        ]
-        return {k: program.get(k) for k in keep_fields if k in program}
-
-    @staticmethod
-    def _build_marker(profile: StudentProfile, programs: List[dict]) -> str:
-        """
-        Embed JSON payload inside an HTML comment so it won't render,
-        but we can parse it later for cleaner UI rendering.
-        """
-
-        # Convert profile to dict safely
-        try:
-            profile_dict = profile.model_dump()  # pydantic (if ever)
-        except Exception:
-            profile_dict = profile.__dict__
-
-        def _json_default(o):
-            # Handle numpy float32 / int64 etc
-            try:
-                import numpy as np  # type: ignore
-                if isinstance(o, (np.integer, np.floating)):
-                    return o.item()
-            except Exception:
-                pass
-            # Fallback: stringify unknowns rather than crashing
-            return str(o)
-
-        payload = {
-            "profile": profile_dict,
-            "programs": programs,
-        }
-
-        return f"<!--SAARTHI_DATA:{json.dumps(payload, ensure_ascii=False, default=_json_default)}-->"
+    def __init__(self, config: Config):
+        self.config = config
+        self.session_manager = SessionManager()
+        self.program_search = ProgramSearchService(config=config)
+        self.roadmap_service = RoadmapService(config=config)
 
     def handle_generate_roadmap(
         self,
@@ -81,55 +25,46 @@ class Controllers:
         grade: str,
         location: str,
         preferences: List[str],
-        preferences_free_text: str,
+        preferences_other: str,
         session_id: str,
-    ) -> Tuple[str, str, str]:
-        """
-        Generate roadmap output.
-        Returns: (status_text, roadmap_markdown_with_marker, session_id)
-        """
-        try:
-            # Ensure session exists
-            session = self.session_manager.get_or_create_session(session_id)
+    ) -> ServiceResult:
+        # Validate profile inputs (existing validator — minimal change)
+        ok, error = Validators.validate_profile(
+            subjects=subjects,
+            interests=interests,
+            extracurriculars=extracurriculars,
+            average=average,
+            grade=grade,
+            location=location,
+            config=self.config,
+        )
+        if not ok:
+            return ServiceResult.failure(error)
 
-            # Validate
-            errors = validate_profile_inputs(subjects, interests, extracurriculars, average, grade, location)
-            if errors:
-                return ("⚠️ " + " ".join(errors), "", session.session_id)
+        # Build profile
+        profile = StudentProfile(
+            name="Student",
+            grade=grade,
+            average=float(average),
+            interests=interests.strip(),
+            subjects=subjects or [],
+            extracurriculars=extracurriculars.strip(),
+            location=location.strip() if location else "",
+            budget="None",  # budget section removed from UI
+            preferences=preferences or [],
+            preferences_other=(preferences_other or "").strip(),
+        )
 
-            # Build profile (Preferences are now first-class)
-            profile = StudentProfile(
-                name=session.name or "Student",
-                grade=grade,
-                average=float(average),
-                interests=interests.strip(),
-                subjects=subjects,
-                extracurriculars=extracurriculars.strip(),
-                location=(location or "").strip(),
-                preferences=preferences or [],
-                preferences_free_text=(preferences_free_text or "").strip(),
-            )
-            session.last_profile = profile
-            logger.info(f"Session started: {session.session_id} for {profile.name}")
+        # Save session details
+        self.session_manager.update_profile(session_id=session_id, profile=profile)
 
-            # Generate roadmap
-            result = self.roadmap_service.generate(profile, session)
+        # Program search
+        programs = self.program_search.search_with_profile(profile)
 
-            if not result.ok:
-                return (f"❌ {result.message}", "", session.session_id)
+        # Roadmap generation (LLM)
+        roadmap_bundle = self.roadmap_service.generate(profile=profile, programs=programs)
 
-            message = result.message or ""
-            raw_programs = (result.data or {}).get("programs", [])
-
-            # Minimize and embed
-            min_programs = [self._minimize_program(p) for p in raw_programs if isinstance(p, dict)]
-            marker = self._build_marker(profile, min_programs)
-
-            return ("✅ Roadmap generated", message + "\n\n" + marker, session.session_id)
-
-        except Exception as e:
-            logger.exception("Error generating roadmap")
-            return (f"❌ Error: {str(e)}", "", session_id)
+        return ServiceResult.success(roadmap_bundle)
 
     def handle_clear_form(self) -> Tuple:
         """Clear form inputs"""
@@ -140,6 +75,6 @@ class Controllers:
             85,         # average (default)
             "Grade 12", # grade (default)
             "",         # location
-            [],         # preferences
-            "",         # preferences free text
+            [],         # preferences (default)
+            "",         # other preferences (default)
         )
