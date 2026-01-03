@@ -1,229 +1,129 @@
-# app.py - Gradio wiring only (thin)
+import logging
+import os
 
 import gradio as gr
-import logging
-import sys
 
 from config import Config
 from controllers import Controllers
+from session import SessionManager
+from services.llm_client import LLMClient
+from services.program_search import ProgramSearchService
+from services.roadmap import RoadmapService
 from ui.layout import create_ui_layout
-from ui.styles import get_css
+from ui.roadmap_renderer import RoadmapRenderer
+from ui.styles import SAARTHI_CSS
 
-# NEW: renders markdown roadmap into dashboard HTML blocks
-from utils.roadmap_renderer import render_roadmap_bundle
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 logger = logging.getLogger("saarthi")
 
 
-def create_app() -> gr.Blocks:
-    """Create and wire the Gradio application"""
+def create_app():
+    setup_logging()
+
     logger.info("=" * 50)
     logger.info(" Initializing Saarthi AI")
     logger.info("=" * 50)
 
-    # Initialize config and controllers
+    # Load configuration
     config = Config()
-    controllers = Controllers(config)
 
-    # Log startup info
-    logger.info(f" Data directory: {config.DATA_DIR}")
-    logger.info(f" AI Service: {'Enabled' if config.GEMINI_API_KEY else 'Demo Mode'}")
-    logger.info(f" Programs loaded: {len(controllers.program_search.programs)}")
+    # Initialize services
+    session_manager = SessionManager()
+    llm_client = LLMClient(config)
+    program_search = ProgramSearchService(config)
+    roadmap_service = RoadmapService(config, llm_client, program_search)
 
-    # Build UI
-    css = get_css(config)
+    # Initialize controllers
+    controllers = Controllers(session_manager, program_search, roadmap_service)
 
+    # UI renderer (turns roadmap markdown into the styled HTML/blocks)
+    renderer = RoadmapRenderer()
+
+    # Create UI
     with gr.Blocks(
-        title="Saarthi AI - University Guidance",
-        css=css,
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="purple",
-            neutral_hue="slate",
-        ),
+        title="Saarthi AI 🏹 | Your Personal Guide",
+        theme=gr.themes.Soft(),
+        css=SAARTHI_CSS,
     ) as app:
-        # Create UI layout and get component references
-        components = create_ui_layout(config)
 
-        # Wire events to controllers
-        wire_events(components, controllers)
+        components = create_ui_layout()
 
-        logger.info("✅ App initialized successfully")
-
-    return app
-
-
-def wire_events(components: dict, controllers: Controllers):
-    """Wire UI events to controller methods"""
-    session_state = components["session_state"]
-    login = components["login"]
-    student = components["student"]
-    admin = components["admin"]  # kept for future use
-
-    # =====================
-    # LOGIN EVENTS
-    # =====================
-    login["start_btn"].click(
-        fn=controllers.handle_start_session,
-        inputs=[login["name_input"]],
-        outputs=[
-            login["section"],
-            student["section"],
-            student["output_display"],  # Full Plan tab markdown
-            session_state,
-        ],
-    )
-
-    # =====================
-    # STUDENT EVENTS
-    # =====================
-
-    # --- Generate Roadmap: update ALL dashboard views ---
-    def _prefs_to_budget(preferences, preferences_free_text) -> str:
-        """Temporary mapping for backward compatibility.
-
-        Step 2 will remove this and pass preferences properly into the roadmap prompt.
-        """
-        prefs = []
-        if isinstance(preferences, list):
-            prefs.extend([str(p).lower() for p in preferences if p])
-        if preferences_free_text:
-            prefs.append(str(preferences_free_text).lower())
-
-        joined = " ".join(prefs)
-        if "scholar" in joined or "financial" in joined or "aid" in joined:
-            return "Scholarship-focused"
-        if "budget" in joined or "tuition" in joined or "cost" in joined or "cheaper" in joined:
-            return "Budget-conscious"
-        return "None"
-
-    def generate_and_render(subjects, interests, extracurriculars, average, grade, location, preferences, preferences_free_text, session_id):
-        budget = _prefs_to_budget(preferences, preferences_free_text)
-
-        md = controllers.handle_generate_roadmap(
+        # Wire events
+        def generate_and_render(
             subjects,
             interests,
             extracurriculars,
             average,
             grade,
             location,
-            budget,
+            preferences,
+            preferences_free_text,
             session_id,
-        )
-        bundle = render_roadmap_bundle(md)
-        return (
-            bundle["timeline_html"],
-            bundle["programs_html"],
-            bundle["checklist_html"],
-            bundle["full_md"],
-        )
+        ):
+            status, roadmap_md, new_session = controllers.handle_generate_roadmap(
+                subjects,
+                interests,
+                extracurriculars,
+                average,
+                grade,
+                location,
+                preferences,
+                preferences_free_text,
+                session_id,
+            )
+            rendered = renderer.render(roadmap_md) if roadmap_md else ""
+            return status, rendered, new_session
 
-    student["generate_btn"].click(
-        fn=generate_and_render,
-        inputs=[
-            student["subjects_input"],
-            student["interests_input"],
-            student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
-            student["preferences_input"],
-            student["preferences_free_text"],
-            session_state,
-        ],
-        outputs=[
-            student["timeline_display"],
-            student["programs_display"],
-            student["checklist_display"],
-            student["output_display"],
-        ],
-    )
-
-    # --- Clear form ---
-    def clear_form():
-        return (
-            [],         # subjects
-            "",         # interests
-            "",         # extracurriculars
-            85,         # average (default)
-            "Grade 12", # grade (default)
-            "",         # location
-            [],         # preferences
-            "",         # preferences_free_text
+        components["generate_btn"].click(
+            fn=generate_and_render,
+            inputs=[
+                components["subjects_input"],
+                components["interests_input"],
+                components["extracurriculars_input"],
+                components["average_input"],
+                components["grade_input"],
+                components["location_input"],
+                components["preferences_input"],
+                components["preferences_free_text"],
+                components["session_id"],
+            ],
+            outputs=[
+                components["status_output"],
+                components["roadmap_output"],
+                components["session_id"],
+            ],
         )
 
-    student["clear_btn"].click(
-        fn=clear_form,
-        inputs=[],
-        outputs=[
-            student["subjects_input"],
-            student["interests_input"],
-            student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
-            student["preferences_input"],
-            student["preferences_free_text"],
-        ],
-    )
-
-    # --- Follow-up: update Q&A + ALL dashboard views ---
-    def followup_and_render(question, current_md, session_id):
-        cleared_q, new_md = controllers.handle_followup(question, current_md, session_id)
-        bundle = render_roadmap_bundle(new_md)
-        return (
-            cleared_q,
-            bundle["timeline_html"],
-            bundle["programs_html"],
-            bundle["checklist_html"],
-            bundle["full_md"],
+        components["clear_btn"].click(
+            fn=controllers.handle_clear_form,
+            inputs=[],
+            outputs=[
+                components["subjects_input"],
+                components["interests_input"],
+                components["extracurriculars_input"],
+                components["average_input"],
+                components["grade_input"],
+                components["location_input"],
+                components["preferences_input"],
+                components["preferences_free_text"],
+            ],
         )
 
-    student["send_btn"].click(
-        fn=followup_and_render,
-        inputs=[
-            student["followup_input"],
-            student["output_display"],
-            session_state,
-        ],
-        outputs=[
-            student["followup_input"],
-            student["timeline_display"],
-            student["programs_display"],
-            student["checklist_display"],
-            student["output_display"],
-        ],
-    )
-
-    student["followup_input"].submit(
-        fn=followup_and_render,
-        inputs=[
-            student["followup_input"],
-            student["output_display"],
-            session_state,
-        ],
-        outputs=[
-            student["followup_input"],
-            student["timeline_display"],
-            student["programs_display"],
-            student["checklist_display"],
-            student["output_display"],
-        ],
-    )
+    return app
 
 
-# Launch
 if __name__ == "__main__":
     app = create_app()
     app.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=int(os.getenv("PORT", "7860")),
         share=False,
-        show_error=True,
     )

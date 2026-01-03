@@ -1559,7 +1559,12 @@ class ProgramSearchService:
             logger.info(f"Typo correction: '{profile.interests}' -> '{corrected_interests}'")
         
         # Build search query from corrected interests + extracurriculars
-        query = f"{corrected_interests} {profile.extracurriculars}".strip()
+        prefs = " ".join([p for p in (getattr(profile, "preferences", []) or []) if p])
+        free = (getattr(profile, "preferences_free_text", "") or "").strip()
+        if free:
+            prefs = (prefs + " " if prefs else "") + free
+        
+        query = f"{corrected_interests} {profile.extracurriculars} {prefs}".strip()
         
         # Get embedding scores for all programs
         embedding_scores = self._calculate_embedding_scores(query)
