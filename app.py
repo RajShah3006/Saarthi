@@ -1,133 +1,60 @@
-# app.py
+# app.py - Gradio wiring only (thin)
+
 import gradio as gr
+import logging
+import sys
 
-from controllers import Controllers
 from config import Config
+from controllers import Controllers
 from ui.layout import create_ui_layout
+from ui.styles import get_css
+
+# NEW: renders markdown roadmap into dashboard HTML blocks
 from utils.roadmap_renderer import render_roadmap_bundle
-from templates import get_system_prompt
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+logger = logging.getLogger("saarthi")
 
 
-def create_app():
+def create_app() -> gr.Blocks:
+    logger.info("=" * 50)
+    logger.info(" Initializing Saarthi AI")
+    logger.info("=" * 50)
+
+    # Initialize config and controllers
     config = Config()
-    controllers = Controllers(config=config)
+    controllers = Controllers(config)
 
-    demo, components = create_ui_layout()
-    wire_events(components, controllers)
+    # Log startup info
+    logger.info(f" Data directory: {config.DATA_DIR}")
+    logger.info(f" AI Service: {'Enabled' if config.GEMINI_API_KEY else 'Demo Mode'}")
+    logger.info(f" Programs loaded: {len(controllers.program_search.programs)}")
 
-    return demo
+    # Build UI
+    css = get_css(config)
+
+    with gr.Blocks(
+        title="Saarthi AI 🏹",
+        css=css,
+        analytics_enabled=False
+    ) as app:
+        components = create_ui_layout(config)
+
+        # Wire events
+        controllers.wire_events(components, render_roadmap_bundle)
+
+    logger.info("✅ App initialized successfully")
+    return app
 
 
-def wire_events(components, controllers: Controllers):
-    student = components["inputs"]
-    outputs = components["outputs"]
-    session_state = components["session_state"]
-
-    # --- Events ---
-    def start_session():
-        return controllers.session_manager.create_session()
-
-    def generate_and_render(
-        subjects,
-        interests,
-        extracurriculars,
-        average,
-        grade,
-        location,
-        preferences,
-        preferences_other,
-        session_id,
-    ):
-        # Ensure session exists
-        if not session_id:
-            session_id = start_session()
-
-        result = controllers.handle_generate_roadmap(
-            subjects=subjects,
-            interests=interests,
-            extracurriculars=extracurriculars,
-            average=average,
-            grade=grade,
-            location=location,
-            preferences=preferences,
-            preferences_other=preferences_other,
-            session_id=session_id,
-        )
-
-        if not result.ok:
-            html_error = f"""
-            <div class="glass-card">
-                <h3>⚠️ Something went wrong</h3>
-                <p>{result.error}</p>
-            </div>
-            """
-            return (
-                session_id,
-                html_error,
-                "",
-                "",
-                "",
-                "",
-            )
-
-        # Render bundle
-        rendered = render_roadmap_bundle(result.data)
-
-        return (
-            session_id,
-            rendered["roadmap_html"],
-            rendered["programs_html"],
-            rendered["checklist_html"],
-            rendered["full_plan_html"],
-            rendered["qa_html"],
-        )
-
-    # Start session on load (optional, but helps)
-    components["outputs"]["roadmap_output"].change(
-        fn=lambda x: x,
-        inputs=components["outputs"]["roadmap_output"],
-        outputs=components["outputs"]["roadmap_output"],
-    )
-
-    student["generate_btn"].click(
-        fn=generate_and_render,
-        inputs=[
-            student["subjects_input"],
-            student["interests_input"],
-            student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
-            student["preferences_input"],
-            student["preferences_other_input"],
-            session_state,
-        ],
-        outputs=[
-            session_state,
-            outputs["roadmap_output"],
-            outputs["programs_output"],
-            outputs["checklist_output"],
-            outputs["full_plan_output"],
-            outputs["qa_output"],
-        ],
-    )
-
-    student["clear_btn"].click(
-        fn=controllers.handle_clear_form,
-        inputs=[],
-        outputs=[
-            student["subjects_input"],
-            student["interests_input"],
-            student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
-            student["preferences_input"],
-            student["preferences_other_input"],
-        ],
-    )
-
+# Create app instance
+app = create_app()
 
 if __name__ == "__main__":
-    demo = create_app()
-    demo.launch()
+    app.launch(server_name="0.0.0.0", server_port=7860)
