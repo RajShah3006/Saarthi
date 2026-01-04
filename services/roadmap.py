@@ -246,7 +246,7 @@ class RoadmapService:
         return payload
 
     def _format_output(self, profile: StudentProfile, results: List[Tuple], ai_response: str) -> str:
-        """Beautiful formatted output"""
+        """Beautiful and Visually pleasing formatted output"""
 
         output = f"""
 ## ✨ Your Personalized University Roadmap
