@@ -576,6 +576,38 @@ def get_css(config: Config) -> str:
         transition: all 0.3s ease;
     }
 
+    /* --- Accordion icon: force proper chevron --- */
+    .gr-accordion summary .icon,
+    .gr-accordion summary svg {
+      display: none !important;   /* hides Gradio's triangle/icon */
+    }
+    
+    .gr-accordion summary::-webkit-details-marker { display: none !important; }
+    .gr-accordion summary::marker { content: "" !important; }
+    
+    .gr-accordion summary{
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 12px !important;
+      list-style: none !important;
+    }
+    
+    .gr-accordion summary::after{
+      content: "▾" !important;
+      opacity: 0.85 !important;
+      transform: rotate(-90deg) !important;
+      transition: transform 0.2s ease, opacity 0.2s ease !important;
+      font-weight: 900 !important;
+      color: var(--text-secondary) !important;
+    }
+    
+    .gr-accordion[open] summary::after{
+      transform: rotate(0deg) !important;
+      opacity: 1 !important;
+      color: var(--neon-cyan) !important;
+    }
+
     /* === ACCORDION CHEVRON FIX === */
     
     /* remove default marker */
