@@ -236,37 +236,40 @@ def _extract_checklist(md: str) -> List[Tuple[str, List[str]]]:
     start = re.search(r"(?i)Actionable Next Steps", md)
     chunk = md[start.start():] if start else md
 
-    # Phase headings are often bold like **This Semester (or as soon as possible):**
+    # Phase headings are often bold like **This Semester:**
     phase_re = re.compile(r"(?m)^\s*\*\*(.+?):\*\*\s*$")
     bullet_re = re.compile(r"(?m)^\s*[-*]\s+(.+?)\s*$")
 
-    # If there are phase headings, split by them and collect bullets under each
     matches = list(phase_re.finditer(chunk))
+
     if matches:
         for i, mh in enumerate(matches):
             title = _norm_spaces(mh.group(1))
             seg_start = mh.end()
             seg_end = matches[i + 1].start() if i + 1 < len(matches) else len(chunk)
             seg = chunk[seg_start:seg_end]
-            items = [_norm_spaces(x) for x in bullet_re.findall(seg)]
-            # Also accept plain lines that look like tasks if bullets are missing
+
+            # bullets under this phase
+            items = [_strip_md(_norm_spaces(x)) for x in bullet_re.findall(seg)]
+
+            # If no bullets, accept task-ish lines
             if not items:
                 lines = [ln.strip() for ln in seg.splitlines() if ln.strip()]
-                # take only task-ish lines (not headings, not separators)
                 for ln in lines:
                     if ln.startswith(("---", "##", "#")):
                         continue
                     if len(ln) >= 8 and not ln.startswith("Metric"):
                         items.append(_strip_md(_norm_spaces(ln)))
+
             items = [x for x in items if x and not x.startswith("🔗")]
             if items:
                 phases.append((title, items[:8]))
 
-    if phases:
-        return phases[:6]
+        if phases:
+            return phases[:6]
 
     # Fallback: find any bullet list anywhere
-    items = [_strip_md(_norm_spaces(x)) for x in bullet_re.findall(seg)]
+    items = [_strip_md(_norm_spaces(x)) for x in bullet_re.findall(md)]
     items = [x for x in items if x and not x.startswith("🔗")]
     if items:
         return [("Next actions", items[:10])]
