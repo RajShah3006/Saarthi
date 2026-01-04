@@ -12,6 +12,20 @@ def _norm_spaces(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 
+def _strip_md(s: str) -> str:
+    s = s or ""
+    # remove leading numbering like "1. "
+    s = re.sub(r"^\s*\d+\.\s*", "", s)
+
+    # basic markdown cleanup
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)          # **bold**
+    s = re.sub(r"\*(.+?)\*", r"\1", s)              # *italic*
+    s = re.sub(r"`([^`]+)`", r"\1", s)              # `code`
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)  # [text](url)
+
+    return _norm_spaces(s)
+
+
 def _find_first(md: str, patterns: List[str]) -> Optional[str]:
     for p in patterns:
         m = re.search(p, md, flags=re.IGNORECASE | re.MULTILINE)
@@ -243,7 +257,7 @@ def _extract_checklist(md: str) -> List[Tuple[str, List[str]]]:
                     if ln.startswith(("---", "##", "#")):
                         continue
                     if len(ln) >= 8 and not ln.startswith("Metric"):
-                        items.append(_norm_spaces(ln))
+                        items.append(_strip_md(_norm_spaces(ln)))
             items = [x for x in items if x and not x.startswith("🔗")]
             if items:
                 phases.append((title, items[:8]))
@@ -252,7 +266,7 @@ def _extract_checklist(md: str) -> List[Tuple[str, List[str]]]:
         return phases[:6]
 
     # Fallback: find any bullet list anywhere
-    items = [_norm_spaces(x) for x in bullet_re.findall(md)]
+    items = [_strip_md(_norm_spaces(x)) for x in bullet_re.findall(seg)]
     items = [x for x in items if x and not x.startswith("🔗")]
     if items:
         return [("Next actions", items[:10])]
