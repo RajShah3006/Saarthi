@@ -12,6 +12,31 @@ def _norm_spaces(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 
+def _phase_key(title: str, items: List[str]) -> str:
+    t = _norm_spaces(title).lower()
+    # signature from first few items (normalized)
+    sig = " | ".join(_norm_spaces(x).lower() for x in (items or [])[:6])
+    return f"{t}::{sig}"
+
+
+def _dedupe_phases(phases: List[Tuple[str, List[str]]]) -> List[Tuple[str, List[str]]]:
+    seen = set()
+    out: List[Tuple[str, List[str]]] = []
+
+    for title, items in phases:
+        t = _norm_spaces(title).lower()
+        # Use first few items to identify duplicates even if long lists
+        sig = tuple(_norm_spaces(x).lower() for x in (items or [])[:6])
+        key = (t, sig)
+
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((title, items))
+
+    return out
+
+
 def _strip_md(s: str) -> str:
     s = s or ""
     # remove leading numbering like "1. "
@@ -266,13 +291,15 @@ def _extract_checklist(md: str) -> List[Tuple[str, List[str]]]:
                 phases.append((title, items[:8]))
 
         if phases:
+            phases = _dedupe_phases(phases)
             return phases[:6]
 
     # Fallback: find any bullet list anywhere
     items = [_strip_md(_norm_spaces(x)) for x in bullet_re.findall(md)]
     items = [x for x in items if x and not x.startswith("🔗")]
     if items:
-        return [("Next actions", items[:10])]
+        one = [("Next actions", items[:10])]
+        return _dedupe_phases(one)
 
     return []
 
@@ -305,6 +332,7 @@ def _timeline_html(md: str) -> str:
     header = _profile_header_html(profile)
 
     phases = _extract_checklist(md)
+    phases = _dedupe_phases(phases)
 
     # If we have phases from checklist, turn them into timeline milestones.
     if phases:
