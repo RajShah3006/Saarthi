@@ -161,6 +161,7 @@ class RoadmapService:
 # services/roadmap.py - Better formatted output + UI-safe structured program payload
 
 import logging
+import re
 from typing import List, Tuple, Dict, Any
 
 from config import Config
@@ -284,29 +285,34 @@ class RoadmapService:
             match_percent = int(round(bd["final"] * 100))
             admission = prog.admission_average or "Check website"
             
-            missing = bd.get("missing_prereqs", [])
-            missing_line = f"⚠️ Missing: {', '.join(missing)}" if missing else ""
-            
             prereqs_display = (prog.prerequisites or "").strip()
+            prereqs_display = re.sub(r"(,\s*){2,}", ", ", prereqs_display).strip(" ,")  # cleans ", ,"
             if prereqs_display:
                 prereqs_display = prereqs_display[:150] + ("..." if len(prereqs_display) > 150 else "")
             else:
                 prereqs_display = "Check university website"
             
-            coop_line = "✅ Co-op Available" if prog.co_op_available else ""
+            missing = bd.get("missing_prereqs", [])
+            lines = [
+                f"{i}. {prog.program_name}",
+                f"   {prog.university_name} | {match_icon} {match_text} ({match_percent}%)",
+                f"   📝 Admission: {admission}",
+                f"   📚 Prerequisites: {prereqs_display}",
+            ]
             
-            output += f"""
-{i}. {prog.program_name}
-{prog.university_name} | {match_icon} {match_text} ({match_percent}%)
-📝 Admission: {admission}
-📚 Prerequisites: {prereqs_display}
-{missing_line}
-{coop_line}
-🔗 Link: {prog.program_url}
----
-"""
+            if missing:
+                lines.append(f"   ⚠️ Missing: {', '.join(missing[:8])}")
+            
+            if prog.co_op_available:
+                lines.append("   ✅ Co-op Available")
+            
+            if prog.program_url:
+                lines.append(f"   🔗 Link: {prog.program_url}")
+            
+            output += "\n".join(lines) + "\n\n---\n"
 
-        output += f"""
+
+            output += f"""
 ## Personalized Analysis
 {ai_response}
 
