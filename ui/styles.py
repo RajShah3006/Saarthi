@@ -1296,4 +1296,30 @@ def get_css(config: Config) -> str:
       #sidebar_toggle_btn{ min-width: 120px; padding: 7px 10px; }
     }
 
+    /* Force the main dashboard row to behave like a flex layout */
+    #dash_row {
+      display: flex !important;
+      gap: 18px;
+      align-items: stretch;
+    }
+    
+    /* Sidebar: fixed-ish width, doesn’t grow */
+    #sidebar_col {
+      flex: 0 0 360px;     /* adjust width if you want */
+      max-width: 420px;
+    }
+    
+    /* Main column: fills remaining space */
+    #main_col {
+      flex: 1 1 auto;
+      min-width: 0;        /* IMPORTANT: prevents overflow causing layout issues */
+    }
+    
+    /* When Gradio hides sidebar (display:none), main should become full width */
+    #sidebar_col[style*="display: none"] + #main_col {
+      flex: 1 1 100% !important;
+      max-width: 100% !important;
+    }
+
+
     """
