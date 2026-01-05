@@ -149,6 +149,11 @@ class Session:
     created_at: datetime = field(default_factory=datetime.now)
     last_profile: Optional[StudentProfile] = None
     last_programs: List[Program] = field(default_factory=list)
+    last_ui_programs: List[Dict[str, Any]] = field(default_factory=list, repr=False)
+    last_phases: List[Dict[str, Any]] = field(default_factory=list, repr=False)
+    last_plan_md: str = ""
+    last_profile_ui: Dict[str, Any] = field(default_factory=dict, repr=False)
+
     conversation_summary: str = ""
     
     def is_valid(self, timeout_minutes: int) -> bool:

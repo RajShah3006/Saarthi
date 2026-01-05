@@ -2,27 +2,31 @@
 import html
 from typing import Dict, List, Any
 
+
 def _esc(s: str) -> str:
     return html.escape(str(s or ""), quote=True)
 
+
 def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     if not programs:
-        return "<div class='card-empty'>No programs yet.</div>"
+        return "<div class='card-empty'>No programs yet. Generate a roadmap to see program cards.</div>"
 
     cards = []
     for p in programs[:12]:
-        name = p.get("program_name","")
-        uni  = p.get("university_name","")
-        pct  = p.get("match_percent") or 0
-        coop = p.get("co_op_available", False)
-        adm  = p.get("admission_average","")
-        pre  = p.get("prerequisites","")
+        name = p.get("program_name", "")
+        uni = p.get("university_name", "")
+        pct = p.get("match_percent") or 0
+        coop = bool(p.get("co_op_available", False))
+        adm = p.get("admission_average", "") or "Check website"
+        pre = p.get("prerequisites", "") or "Check website"
         miss = p.get("missing_prereqs", []) or []
-        url  = p.get("program_url","")
+        url = p.get("program_url", "") or ""
 
         badge_cls = "badge-low"
-        if pct >= 85: badge_cls = "badge-good"
-        elif pct >= 75: badge_cls = "badge-mid"
+        if pct >= 85:
+            badge_cls = "badge-good"
+        elif pct >= 75:
+            badge_cls = "badge-mid"
 
         miss_chips = ""
         if miss:
@@ -31,12 +35,20 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
 
         meta_rows = []
         if adm:
-            meta_rows.append(f"<div class='meta-row'><span>📝 Admission</span><span>{_esc(adm)}</span></div>")
+            meta_rows.append(
+                f"<div class='meta-row'><span>📝 Admission</span><span>{_esc(adm)}</span></div>"
+            )
         if pre:
-            meta_rows.append(f"<div class='meta-row'><span>📚 Prereqs</span><span>{_esc(pre)}</span></div>")
+            meta_rows.append(
+                f"<div class='meta-row'><span>📚 Prereqs</span><span>{_esc(pre)}</span></div>"
+            )
 
         coop_html = "<span class='pill'>✅ Co-op</span>" if coop else ""
-        link_html = f"<a class='link-btn' href='{_esc(url)}' target='_blank' rel='noopener'>View Program</a>" if url else ""
+        link_html = (
+            f"<a class='link-btn' href='{_esc(url)}' target='_blank' rel='noopener'>View Program</a>"
+            if url
+            else ""
+        )
 
         cards.append(f"""
         <div class="prog-card">
@@ -60,15 +72,18 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
 
     return f"<div class='prog-grid'>{''.join(cards)}</div>"
 
+
 def render_checklist(phases: List[Dict[str, Any]]) -> str:
     if not phases:
-        return "<div class='card-empty'>No checklist yet.</div>"
+        return "<div class='card-empty'>No checklist yet. Generate a roadmap to see tasks.</div>"
 
     blocks = []
     for ph in phases[:6]:
-        title = ph.get("title","")
+        title = ph.get("title", "")
         items = ph.get("items", []) or []
-        checks = "".join([f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>" for it in items[:10]])
+        checks = "".join(
+            [f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>" for it in items[:10]]
+        )
         blocks.append(f"""
         <div class="phase">
           <div class="phase-title">{_esc(title)}</div>
@@ -77,11 +92,16 @@ def render_checklist(phases: List[Dict[str, Any]]) -> str:
         """)
     return f"<div class='phase-wrap'>{''.join(blocks)}</div>"
 
+
 def render_timeline(profile: Dict[str, Any], phases: List[Dict[str, Any]]) -> str:
     chips = []
-    if profile.get("interest"): chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
-    if profile.get("grade") and profile.get("avg"):
-        chips.append(f"<span class='chip'>📊 {_esc(profile['grade'])} • {_esc(profile['avg'])}%</span>")
+    if profile.get("interest"):
+        chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
+    if profile.get("grade"):
+        g = profile["grade"]
+        if profile.get("avg") is not None:
+            g = f"{g} • {profile['avg']}%"
+        chips.append(f"<span class='chip'>📊 {_esc(g)}</span>")
     if profile.get("subjects"):
         chips.append(f"<span class='chip chip-wide'>📚 {_esc(profile['subjects'])}</span>")
 
@@ -99,7 +119,7 @@ def render_timeline(profile: Dict[str, Any], phases: List[Dict[str, Any]]) -> st
 
     items_html = []
     for ph in phases[:6]:
-        title = ph.get("title","")
+        title = ph.get("title", "")
         items = ph.get("items", []) or []
         li = "".join([f"<li>{_esc(x)}</li>" for x in items[:6]])
         items_html.append(f"""
