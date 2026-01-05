@@ -52,24 +52,53 @@ def wire_events(components: dict, controllers: Controllers):
     session_state = components["session_state"]
     login = components["login"]
     student = components["student"]
+
+    # =====================
+    # SIDEBAR TOGGLE (must be inside wire_events)
+    # =====================
+    def toggle_sidebar(collapsed: bool):
+        collapsed = bool(collapsed)
+        new_collapsed = not collapsed
+        label = "Show Inputs ▶" if new_collapsed else "Hide Inputs ◀"
+        return (
+            gr.update(visible=not new_collapsed),  # sidebar column visibility
+            new_collapsed,                         # sidebar state
+            gr.update(value=label),                # button text
+        )
+
+    # These keys MUST exist in create_ui_layout():
+    # student["sidebar_col"], student["sidebar_state"], student["sidebar_toggle_btn"]
+    student["sidebar_toggle_btn"].click(
+        fn=toggle_sidebar,
+        inputs=[student["sidebar_state"]],
+        outputs=[student["sidebar_col"], student["sidebar_state"], student["sidebar_toggle_btn"]],
+    )
+
+    # =====================
+    # PRESETS (inside wire_events)
+    # =====================
     student["preset_eng"].click(fn=lambda: ["Engineering"], inputs=[], outputs=[student["interest_tags_input"]])
     student["preset_cs"].click(fn=lambda: ["Computer Science"], inputs=[], outputs=[student["interest_tags_input"]])
     student["preset_bus"].click(fn=lambda: ["Business/Commerce"], inputs=[], outputs=[student["interest_tags_input"]])
     student["preset_hs"].click(fn=lambda: ["Health Sciences"], inputs=[], outputs=[student["interest_tags_input"]])
 
+    # =====================
     # LOGIN
+    # =====================
     login["start_btn"].click(
         fn=controllers.handle_start_session,
         inputs=[login["name_input"]],
         outputs=[
             login["section"],
             student["section"],
-            student["output_display"],
+            student["output_display"],  # Full plan markdown
             session_state,
         ],
     )
 
+    # =====================
     # Generate Roadmap
+    # =====================
     def generate_and_render(subjects, interest_tags, interest_details, extracurriculars, average, grade, location, preferences, session_id):
         tags = [t.strip() for t in (interest_tags or []) if t and t.strip()]
         details = (interest_details or "").strip()
@@ -92,12 +121,23 @@ def wire_events(components: dict, controllers: Controllers):
             session_id,
         )
 
-        timeline_html = render_timeline(plan.get("profile", {}), plan.get("phases", []))
-        programs_html = render_program_cards(plan.get("programs", []))
-        checklist_html = render_checklist(plan.get("phases", []))
-        full_md = plan.get("md", "")
+        # EXPECTED (recommended) plan dict:
+        # { "md": "...", "profile": {...}, "programs": [...], "phases": [...] }
+        if isinstance(plan, dict):
+            timeline_html = render_timeline(plan.get("profile", {}), plan.get("phases", []))
+            programs_html = render_program_cards(plan.get("programs", []))
+            checklist_html = render_checklist(plan.get("phases", []))
+            full_md = plan.get("md", "") or ""
+            return timeline_html, programs_html, checklist_html, full_md
 
-        return timeline_html, programs_html, checklist_html, full_md
+        # fallback if controller still returns markdown string
+        full_md = plan or ""
+        return (
+            "<div class='card-empty'>Timeline unavailable (controller returned markdown only).</div>",
+            "<div class='card-empty'>Programs unavailable (controller returned markdown only).</div>",
+            "<div class='card-empty'>Checklist unavailable (controller returned markdown only).</div>",
+            full_md,
+        )
 
     student["generate_btn"].click(
         fn=generate_and_render,
@@ -120,7 +160,9 @@ def wire_events(components: dict, controllers: Controllers):
         ],
     )
 
+    # =====================
     # Clear form
+    # =====================
     student["clear_btn"].click(
         fn=controllers.handle_clear_form,
         inputs=[],
@@ -136,16 +178,27 @@ def wire_events(components: dict, controllers: Controllers):
         ],
     )
 
-    # Follow-up (structured render from session-stored plan)
+    # =====================
+    # Follow-up
+    # =====================
+    # IMPORTANT:
+    # - If your controller followup still expects (question, current_md, session_id),
+    #   keep current_md in inputs.
+    # - If you refactored it to (question, session_id) and it returns a plan dict,
+    #   then this matches.
+
     def followup_and_render(question, session_id):
         plan = controllers.handle_followup(question, session_id)
 
-        timeline_html = render_timeline(plan.get("profile", {}), plan.get("phases", []))
-        programs_html = render_program_cards(plan.get("programs", []))
-        checklist_html = render_checklist(plan.get("phases", []))
-        full_md = plan.get("md", "")
+        if isinstance(plan, dict):
+            timeline_html = render_timeline(plan.get("profile", {}), plan.get("phases", []))
+            programs_html = render_program_cards(plan.get("programs", []))
+            checklist_html = render_checklist(plan.get("phases", []))
+            full_md = plan.get("md", "") or ""
+            return "", timeline_html, programs_html, checklist_html, full_md
 
-        return "", timeline_html, programs_html, checklist_html, full_md
+        # fallback
+        return "", gr.update(), gr.update(), gr.update(), (plan or "")
 
     student["send_btn"].click(
         fn=followup_and_render,

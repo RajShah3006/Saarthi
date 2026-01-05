@@ -45,9 +45,10 @@ def create_ui_layout(config: Config) -> dict:
 
     # === STUDENT DASHBOARD ===
     with gr.Column(visible=False, elem_classes="glass-panel") as student_section:
+        sidebar_collapsed = gr.State(False)  # False = expanded, True = hidden
         with gr.Row():
             # Left: Form
-            with gr.Column(scale=1, min_width=320):
+            with gr.Column(scale=1, min_width=320, elem_id="saarthi_sidebar") as sidebar_col:
                 gr.HTML(f"<div class='status-badge'>{status_text}</div>")
 
                 with gr.Accordion("1) Academics", open=True):
@@ -122,6 +123,11 @@ def create_ui_layout(config: Config) -> dict:
 
             # Right: Roadmap Dashboard
             with gr.Column(scale=2, min_width=520):
+                sidebar_toggle_btn = gr.Button(
+                "Hide Inputs ◀",
+                elem_id="sidebar_toggle_btn",
+                elem_classes="sidebar-toggle"
+            )
                 gr.Markdown("### Your Roadmap Dashboard")
 
                 with gr.Tabs(elem_id="roadmap_tabs"):
@@ -173,6 +179,9 @@ def create_ui_layout(config: Config) -> dict:
         },
         "student": {
             "section": student_section,
+            "sidebar_col": sidebar_col,
+            "sidebar_state": sidebar_collapsed,
+            "sidebar_toggle_btn": sidebar_toggle_btn,
 
             "subjects_input": subjects_input,
             "interest_tags_input": interest_tags_input,

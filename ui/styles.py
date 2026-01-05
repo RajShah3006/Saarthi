@@ -1278,4 +1278,22 @@ def get_css(config: Config) -> str:
       font-weight: 700 !important;
     }
 
+    /* Collapsible sidebar toggle */
+    #sidebar_toggle_btn{
+      width: fit-content;
+      min-width: 140px;
+      padding: 8px 12px;
+      border-radius: 14px;
+      margin: 2px 0 10px 0;
+    }
+    
+    /* Optional: make the button look nice + not huge */
+    #sidebar_toggle_btn button{
+      font-weight: 700;
+    }
+
+    @media (max-width: 1200px){
+      #sidebar_toggle_btn{ min-width: 120px; padding: 7px 10px; }
+    }
+
     """
