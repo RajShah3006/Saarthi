@@ -12,6 +12,100 @@ def _norm_spaces(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 
+def _canon_phase_title(title: str) -> str:
+    """
+    Canonicalize phase titles so:
+    'This Semester (Immediate Priorities)' == 'This Semester'
+    """
+    t = _norm_spaces(title).lower()
+    t = re.sub(r"\([^)]*\)", "", t)   # remove (...) notes
+    t = re.sub(r"[:\-–—]+$", "", t)   # trailing punctuation
+    return _norm_spaces(t)
+
+
+def _unique_keep_order(items: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for it in items:
+        k = _norm_spaces(it).lower()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(it)
+    return out
+
+
+def _merge_duplicate_phases(phases: List[Tuple[str, List[str]]]) -> List[Tuple[str, List[str]]]:
+    """
+    Merge phases with the same canonical title by combining unique items.
+    Keeps first title formatting.
+    """
+    merged: Dict[str, Tuple[str, List[str]]] = {}
+    order: List[str] = []
+
+    for title, items in phases:
+        key = _canon_phase_title(title)
+        items = _unique_keep_order(items or [])
+
+        if key not in merged:
+            merged[key] = (title, items)
+            order.append(key)
+        else:
+            old_title, old_items = merged[key]
+            merged[key] = (old_title, _unique_keep_order(old_items + items))
+
+    return [merged[k] for k in order]
+
+
+def _cut_if_document_repeated(md: str) -> str:
+    """
+    If the main roadmap header appears twice, keep only the first document.
+    """
+    if not md:
+        return md
+
+    hdr = re.compile(r"(?m)^\s*##\s*✨\s*Your Personalized University Roadmap\s*$")
+    hits = list(hdr.finditer(md))
+    if len(hits) >= 2:
+        return md[:hits[1].start()].rstrip()
+
+    return md
+
+
+def _remove_duplicate_h2_sections(md: str, titles: List[str]) -> str:
+    """
+    Remove duplicate '## <title>' blocks beyond the first.
+    Deletes from duplicate heading until next '## ' or end.
+    """
+    if not md:
+        return md
+
+    for title in titles:
+        pat = re.compile(rf"(?mi)^\s*##\s*{re.escape(title)}\s*$")
+        hits = list(pat.finditer(md))
+        if len(hits) <= 1:
+            continue
+
+        for m in reversed(hits[1:]):
+            start = m.start()
+            nxt = re.search(r"(?m)^\s*##\s+", md[m.end():])
+            end = (m.end() + nxt.start()) if nxt else len(md)
+            md = (md[:start].rstrip() + "\n\n" + md[end:].lstrip())
+
+    return md
+
+
+def _clean_full_md(md: str) -> str:
+    md = (md or "").strip()
+    md = _cut_if_document_repeated(md)
+    md = _remove_duplicate_h2_sections(md, [
+        "Top Matching Programs",
+        "Actionable Next Steps",
+        "Personalized Analysis",
+    ])
+    return md.strip()
+
+
 def _phase_key(title: str, items: List[str]) -> str:
     t = _norm_spaces(title).lower()
     # signature from first few items (normalized)
@@ -291,7 +385,7 @@ def _extract_checklist(md: str) -> List[Tuple[str, List[str]]]:
                 phases.append((title, items[:8]))
 
         if phases:
-            phases = _dedupe_phases(phases)
+            phases = _merge_duplicate_phases(phases)
             return phases[:6]
 
     # Fallback: find any bullet list anywhere
@@ -389,9 +483,11 @@ def _timeline_html(md: str) -> str:
 # ---------- Public API ----------
 
 def render_roadmap_bundle(md: str) -> Dict[str, str]:
+    md_clean = _clean_full_md(md or "")
+
     return {
-        "timeline_html": _timeline_html(md),
-        "programs_html": _programs_html(md),
-        "checklist_html": _checklist_html(md),
-        "full_md": md or ""
+        "timeline_html": _timeline_html(md_clean),
+        "programs_html": _programs_html(md_clean),
+        "checklist_html": _checklist_html(md_clean),
+        "full_md": md_clean
     }
