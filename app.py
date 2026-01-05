@@ -8,9 +8,7 @@ from config import Config
 from controllers import Controllers
 from ui.layout import create_ui_layout
 from ui.styles import get_css
-
-# NEW: renders markdown roadmap into dashboard HTML blocks
-from utils.roadmap_renderer import render_roadmap_bundle
+from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
 
 # Configure logging
 logging.basicConfig(
@@ -96,7 +94,7 @@ def wire_events(components: dict, controllers: Controllers):
         else:
             interests = details  # validator will catch empty
     
-        md = controllers.handle_generate_roadmap(
+        md, ui_programs, ui_phases, ui_profile = controllers.handle_generate_roadmap(
             subjects,
             interests,
             extracurriculars,
@@ -106,6 +104,12 @@ def wire_events(components: dict, controllers: Controllers):
             preferences,
             session_id,
         )
+
+        timeline_html  = render_timeline(ui_profile, ui_phases)
+        programs_html  = render_program_cards(ui_programs)
+        checklist_html = render_checklist(ui_phases)
+        return (timeline_html, programs_html, checklist_html, md)
+        '''
         bundle = render_roadmap_bundle(md)
         return (
             bundle["timeline_html"],
@@ -113,6 +117,7 @@ def wire_events(components: dict, controllers: Controllers):
             bundle["checklist_html"],
             bundle["full_md"],
         )
+        '''
 
 
     student["generate_btn"].click(

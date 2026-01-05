@@ -162,6 +162,7 @@ class RoadmapService:
 
 import logging
 import re
+import json
 from typing import List, Tuple, Dict, Any
 
 from config import Config
@@ -196,13 +197,15 @@ class RoadmapService:
             response = self.llm.generate(prompt, self.prompts.roadmap_system_prompt())
             if not response:
                 return ServiceResult.failure("AI response failed.")
-
-            formatted = self._format_output(profile, results, response)
+            data = json.loads(response)
+            analysis = data.get("analysis","")
+            phases = data.get("next_steps", [])
+            formatted = self._format_output(profile, results, analysis, phases)
 
             # ✅ UI-safe payload (dicts only, small, includes match + prereq info)
             ui_programs = [self._program_to_payload(p, score, bd) for (p, score, bd) in results]
 
-            return ServiceResult.success(message=formatted, data={"programs": ui_programs})
+            return ServiceResult.success(message=formatted, data={"programs": ui_programs, "phases": phases})
 
         except Exception as e:
             logger.error(f"Error: {e}")

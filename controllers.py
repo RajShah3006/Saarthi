@@ -157,11 +157,20 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 return f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*"
     
             session.last_profile = profile
-            raw_programs = (result.data or {}).get("programs", [])
-            session.last_programs = raw_programs
+            ui_programs = (result.data or {}).get("programs", [])
+            ui_phases = (result.data or {}).get("phases", [])  # new
+            ui_profile = {
+                "interest": profile.interests,
+                "grade": profile.grade,
+                "avg": profile.average,
+                "subjects": ", ".join(profile.subjects[:5]) if profile.subjects else ""
+            }
+            return (result.message, ui_programs, ui_phases, ui_profile)
+
+            session.last_programs = ui_programs
             session.conversation_summary = f"Generated roadmap for {profile.interests}"
     
-            min_programs = [self._minimize_program(p) for p in raw_programs]
+            min_programs = [self._minimize_program(p) for p in ui_programs]
             marker = self._build_marker(profile, min_programs)
     
             return f"{result.message}\n\n{marker}"
