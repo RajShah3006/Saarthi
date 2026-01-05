@@ -1270,4 +1270,12 @@ def get_css(config: Config) -> str:
       border-color: rgba(255,255,255,0.12);
     }
 
+    /* Interest preset buttons */
+    .chip-btn button{
+      padding: 8px 12px !important;
+      border-radius: 999px !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+    }
+
     """

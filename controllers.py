@@ -1,10 +1,7 @@
-# controllers.py - Thin handlers that delegate to services
-
+# controllers.py
 import logging
 import traceback
-import json
-import re
-from typing import Tuple, List, Any
+from typing import Tuple, List, Any, Dict
 
 import gradio as gr
 
@@ -19,23 +16,15 @@ from utils.validators import Validators
 logger = logging.getLogger("saarthi.controllers")
 
 
-DATA_MARKER_RE = re.compile(r"<!--SAARTHI_DATA:(.+?)-->", re.DOTALL)
-
-
 class Controllers:
-    """Thin controller layer - validates input, calls services, formats output"""
-
     def __init__(self, config: Config):
         self.config = config
-
-        # Initialize services
         self.session_manager = SessionManager(config)
         self.llm_client = LLMClient(config)
         self.program_search = ProgramSearchService(config)
         self.roadmap_service = RoadmapService(config, self.llm_client, self.program_search)
 
     def handle_start_session(self, name: str) -> Tuple[Any, Any, str, str]:
-        """Start a new session (no auth, just session tracking)"""
         try:
             name = Validators.sanitize_text(name, max_length=50) or "Student"
             session = self.session_manager.create_session(name)
@@ -43,22 +32,27 @@ class Controllers:
             logger.info(f"Session started: {session.id} for {name}")
 
             welcome_message = f"""## Welcome, {name}!
-
 Fill in your profile below and click **Generate Roadmap** to get personalized university guidance.
 
 **Tips for best results:**
 - Be specific about your interests
 - Include all relevant subjects
-- Mention your extracurricular activities
+- Mention anything important in preferences (optional)
 
 *Session ID: {session.id[:8]}...*
 """
 
+            # reset structured session state
+            session.last_plan_md = welcome_message
+            session.last_ui_programs = []
+            session.last_phases = []
+            session.last_profile_ui = {}
+
             return (
-                gr.update(visible=False),   # Hide login
-                gr.update(visible=True),    # Show student dashboard
-                welcome_message,            # Output display (Full Plan tab)
-                session.id                  # Session state
+                gr.update(visible=False),
+                gr.update(visible=True),
+                welcome_message,
+                session.id,
             )
 
         except Exception as e:
@@ -67,51 +61,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 gr.update(visible=True),
                 gr.update(visible=False),
                 f"❌ Error starting session: {str(e)}",
-                ""
+                "",
             )
-
-    @staticmethod
-    def _minimize_program(p: dict) -> dict:
-        """
-        Remove huge fields like embeddings and keep only UI-relevant fields.
-        This prevents massive HTML comment payloads and keeps rendering fast.
-        """
-        if not isinstance(p, dict):
-            return {}
-
-        keep = {
-            "program_name": p.get("program_name") or p.get("name") or p.get("program"),
-            "program_url": p.get("program_url") or p.get("url") or p.get("link") or p.get("program_page"),
-            "university": p.get("university") or p.get("school") or p.get("institution"),
-
-            # scoring keys (if your pipeline provides them)
-            "match_percent": p.get("match_percent") or p.get("match") or p.get("score"),
-
-            "admission_average": p.get("admission_average") or p.get("admission") or p.get("admission_req"),
-            "prerequisites": p.get("prerequisites") or p.get("prereqs") or p.get("required_courses"),
-
-            "missing": p.get("missing") or p.get("missing_prereqs") or p.get("missing_courses"),
-            "coop_available": p.get("coop_available") or p.get("coop"),
-        }
-
-        # Drop empties
-        return {k: v for k, v in keep.items() if v not in (None, "", [], {})}
-
-
-    @staticmethod
-    def _build_marker(profile: StudentProfile, programs: List[dict]) -> str:
-        # Convert profile to plain dict safely
-        try:
-            profile_dict = profile.model_dump()  # pydantic
-        except Exception:
-            profile_dict = getattr(profile, "__dict__", {})
-
-        payload = {
-            "profile": profile_dict,
-            "programs": programs,
-        }
-        # Keep marker compact (no embeddings)
-        return f"<!--SAARTHI_DATA:{json.dumps(payload, ensure_ascii=False)}-->"
 
     def handle_generate_roadmap(
         self,
@@ -122,25 +73,26 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         grade: str,
         location: str,
         preferences: str,
-        session_id: str
-    ) -> str:
-        """Generate university roadmap - main feature"""
+        session_id: str,
+    ) -> Dict[str, Any]:
         try:
             session = self.session_manager.get_session(session_id)
             if not session:
-                return "⚠️ Session expired. Please refresh the page to start a new session."
-    
+                msg = "⚠️ Session expired. Please refresh the page to start a new session."
+                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+
             validation = Validators.validate_profile_inputs(
                 interests=interests,
                 extracurriculars=extracurriculars,
                 average=average,
                 grade=grade,
                 location=location,
-                config=self.config
+                config=self.config,
             )
             if not validation.ok:
-                return f"⚠️ **Validation Error**\n\n{validation.message}"
-    
+                msg = f"⚠️ **Validation Error**\n\n{validation.message}"
+                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+
             profile = StudentProfile(
                 name=session.name,
                 grade=grade,
@@ -151,89 +103,91 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 location=Validators.sanitize_text(location, self.config.MAX_LOCATION_LENGTH),
                 preferences=Validators.sanitize_text(preferences, self.config.MAX_INTERESTS_LENGTH),
             )
-    
+
             result = self.roadmap_service.generate(profile, session)
             if not result.ok:
-                return f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*"
-    
+                msg = f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*"
+                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+
             session.last_profile = profile
-            ui_programs = (result.data or {}).get("programs", [])
-            ui_phases = (result.data or {}).get("phases", [])  # new
+
+            ui_programs = (result.data or {}).get("programs", []) or []
+            ui_phases = (result.data or {}).get("phases", []) or []
             ui_profile = {
                 "interest": profile.interests,
                 "grade": profile.grade,
                 "avg": profile.average,
-                "subjects": ", ".join(profile.subjects[:5]) if profile.subjects else ""
+                "subjects": ", ".join(profile.subjects[:5]) if profile.subjects else "",
             }
-            return (result.message, ui_programs, ui_phases, ui_profile)
 
-            session.last_programs = ui_programs
-            session.conversation_summary = f"Generated roadmap for {profile.interests}"
-    
-            min_programs = [self._minimize_program(p) for p in ui_programs]
-            marker = self._build_marker(profile, min_programs)
-    
-            return f"{result.message}\n\n{marker}"
-    
+            session.last_ui_programs = ui_programs
+            session.last_phases = ui_phases
+            session.last_profile_ui = ui_profile
+            session.last_plan_md = result.message
+
+            return {
+                "md": result.message,
+                "programs": ui_programs,
+                "phases": ui_phases,
+                "profile": ui_profile,
+            }
+
         except Exception as e:
             error_id = str(hash(str(e)))[:8]
             logger.error(f"Generate roadmap error [{error_id}]: {e}\n{traceback.format_exc()}")
-            return (
+            msg = (
                 "❌ **Unexpected Error**\n\n"
                 "Something went wrong. Please try again.\n\n"
                 f"*Error ID: {error_id}*"
             )
+            return {"md": msg, "programs": [], "phases": [], "profile": {}}
 
-
-    def handle_followup(self, question: str, current_output: str, session_id: str) -> Tuple[str, str]:
-        """Handle follow-up questions with context"""
+    def handle_followup(self, question: str, session_id: str) -> Dict[str, Any]:
         try:
-            if not question or not question.strip():
-                return "", current_output
-
             session = self.session_manager.get_session(session_id)
             if not session:
-                return "", current_output + "\n\n⚠️ Session expired. Please refresh to continue."
+                msg = "⚠️ Session expired. Please refresh to continue."
+                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+
+            question = (question or "").strip()
+            if not question:
+                # just re-render last plan
+                return {
+                    "md": session.last_plan_md or "",
+                    "programs": session.last_ui_programs or [],
+                    "phases": session.last_phases or [],
+                    "profile": session.last_profile_ui or {},
+                }
 
             question = Validators.sanitize_text(question, self.config.MAX_FOLLOWUP_LENGTH)
 
-            # Preserve embedded marker, but keep it out of visible text changes
-            marker = ""
-            m = DATA_MARKER_RE.search(current_output or "")
-            if m:
-                marker = m.group(0)
-                base_output = DATA_MARKER_RE.sub("", current_output).strip()
-            else:
-                base_output = current_output or ""
-
             result = self.roadmap_service.followup(question, session)
             if not result.ok:
-                new_text = base_output + f"\n\n❌ {result.message}"
-                if marker:
-                    new_text = f"{new_text}\n\n{marker}"
-                return "", new_text
+                session.last_plan_md = (session.last_plan_md or "") + f"\n\n❌ {result.message}"
+            else:
+                base = session.last_plan_md or ""
+                session.last_plan_md = f"{base}\n\n---\n\n**You:** {question}\n\n**Saarthi:** {result.message}"
 
-            # Append Q&A but keep marker at end
-            new_output = f"{base_output}\n\n---\n\n**You:** {question}\n\n**Saarthi:** {result.message}"
-            if marker:
-                new_output = f"{new_output}\n\n{marker}"
-
-            return "", new_output
+            return {
+                "md": session.last_plan_md,
+                "programs": session.last_ui_programs or [],
+                "phases": session.last_phases or [],
+                "profile": session.last_profile_ui or {},
+            }
 
         except Exception as e:
             logger.error(f"Followup error: {e}\n{traceback.format_exc()}")
-            return "", (current_output or "") + f"\n\n❌ Error processing question: {str(e)}"
+            msg = (session.last_plan_md if session else "") + f"\n\n❌ Error processing question: {str(e)}"
+            return {"md": msg, "programs": [], "phases": [], "profile": {}}
 
     def handle_clear_form(self) -> Tuple:
-        """Clear form inputs"""
         return (
-            [],         # subjects
-            [],         # interest tags
-            "",         # interest details
-            "",         # extracurriculars
-            85,         # average (default)
-            "Grade 12", # grade (default)
-            "",         # location
-            "",         # preferences
+            [],
+            [],
+            "",
+            "",
+            85,
+            "Grade 12",
+            "",
+            "",
         )
-

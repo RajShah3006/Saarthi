@@ -84,6 +84,13 @@ def create_ui_layout(config: Config) -> dict:
                         lines=2
                     )
 
+                    with gr.Row():
+                        preset_eng = gr.Button("Engineering", elem_classes="chip-btn")
+                        preset_cs  = gr.Button("Computer Science", elem_classes="chip-btn")
+                        preset_bus = gr.Button("Business/Commerce", elem_classes="chip-btn")
+                        preset_hs  = gr.Button("Health Sciences", elem_classes="chip-btn")
+
+
                 with gr.Accordion("3) Extras & Preferences", open=False):
                     extracurriculars_input = gr.Textbox(
                         label="Extracurricular Activities",
@@ -175,6 +182,11 @@ def create_ui_layout(config: Config) -> dict:
             "grade_input": grade_input,
             "location_input": location_input,
             "preferences_input": preferences_input,
+
+            "preset_eng": preset_eng,
+            "preset_cs": preset_cs,
+            "preset_bus": preset_bus,
+            "preset_hs": preset_hs,
 
             "clear_btn": clear_btn,
             "generate_btn": generate_btn,
