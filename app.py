@@ -1,4 +1,4 @@
-# app.py - Gradio wiring only (thin) + Wizard + Collapsible Sidebar (right column expands)
+# app.py - Two-page flow (Inputs Wizard -> Fullscreen Outputs) + Thin wiring
 
 import gradio as gr
 import logging
@@ -12,6 +12,7 @@ from ui.styles import get_css
 
 from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
 
+
 # Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -21,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger("saarthi")
 
 
-def create_app() -> gr.Blocks:
+def create_app():
     logger.info("=" * 50)
     logger.info(" Initializing Saarthi AI")
     logger.info("=" * 50)
@@ -34,21 +35,20 @@ def create_app() -> gr.Blocks:
     logger.info(f" Programs loaded: {len(controllers.program_search.programs)}")
 
     css = get_css(config)
+    theme = gr.themes.Soft(
+        primary_hue="blue",
+        secondary_hue="purple",
+        neutral_hue="slate",
+    )
 
-    with gr.Blocks(
-        title="Saarthi AI - University Guidance",
-        css=css,
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="purple",
-            neutral_hue="slate",
-        ),
-    ) as app:
+    # Gradio 6+: pass css/theme to launch() (not Blocks) to avoid warning
+    with gr.Blocks(title="Saarthi AI - University Guidance") as app:
         components = create_ui_layout(config)
         wire_events(components, controllers)
         logger.info("✅ App initialized successfully")
 
-    return app
+    launch_kwargs = dict(css=css, theme=theme)
+    return app, launch_kwargs
 
 
 def wire_events(components: dict, controllers: Controllers):
@@ -77,20 +77,38 @@ def wire_events(components: dict, controllers: Controllers):
             f"**Preferences:** {preferences}"
         )
 
-    def safe_plan_dict(plan: Any) -> Dict[str, Any]:
+    def safe_plan_dict(plan_raw: Any) -> Dict[str, Any]:
         """
-        Controllers should ideally return a dict:
-        { "md": "...", "profile": {...}, "programs": [...], "phases": [...] }
-        If not, we degrade gracefully.
+        Normalize controller output into:
+        { "md": str, "profile": dict, "programs": list, "phases": list }
+
+        Supports:
+        - dict (preferred)
+        - markdown string (legacy)
+        - tuple/list (md, programs, phases, profile) from earlier refactors
         """
-        if isinstance(plan, dict):
-            return plan
+        if isinstance(plan_raw, dict):
+            return {
+                "md": plan_raw.get("md", "") or "",
+                "profile": plan_raw.get("profile", {}) or {},
+                "programs": plan_raw.get("programs", []) or [],
+                "phases": plan_raw.get("phases", []) or [],
+            }
+
+        if isinstance(plan_raw, (tuple, list)) and len(plan_raw) == 4:
+            md, programs, phases, profile = plan_raw
+            return {
+                "md": md or "",
+                "profile": profile or {},
+                "programs": programs or [],
+                "phases": phases or [],
+            }
+
         # fallback: treat as markdown string
-        return {"md": plan or "", "profile": {}, "programs": [], "phases": []}
+        return {"md": plan_raw or "", "profile": {}, "programs": [], "phases": []}
 
     # ------------------------------------------------------------------
-    # Wizard (Step-by-step inputs)
-    # IMPORTANT: This avoids relying on State.change (can be flaky)
+    # Wizard step navigation
     # ------------------------------------------------------------------
     def set_step(step: int):
         step = max(1, min(4, int(step)))
@@ -103,7 +121,7 @@ def wire_events(components: dict, controllers: Controllers):
             gr.update(visible=(step == 4)),
             gr.update(visible=(step > 1)),          # back visible
             gr.update(visible=(step < 4)),          # next visible
-            gr.update(interactive=(step == 4)),     # ✅ generate enabled only on step 4
+            gr.update(interactive=(step == 4)),     # generate enabled only on step 4
         )
 
     def on_next(step, subjects, tags, details, extracurriculars, average, grade, location, preferences):
@@ -116,15 +134,12 @@ def wire_events(components: dict, controllers: Controllers):
                 value=build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences)
             )
 
-        # base returns 9 outputs, then add review_box as 10th
+        # base returns 9 outputs; review_box is 10th
         return (*base, review)
 
     def on_back(step):
-        # set_step returns 9 outputs (no review update here)
         return set_step(max(1, int(step) - 1))
 
-    # These keys MUST exist in create_ui_layout(config) -> student dict:
-    # wizard_step, step_label, step1..step4, back_btn, next_btn, generate_btn, review_box
     student["next_btn"].click(
         fn=on_next,
         inputs=[
@@ -161,39 +176,8 @@ def wire_events(components: dict, controllers: Controllers):
     )
 
     # ------------------------------------------------------------------
-    # Sidebar Toggle (hide left inputs + make right take full width)
-    # ------------------------------------------------------------------
-    def toggle_sidebar(collapsed: bool):
-        collapsed = bool(collapsed)
-        new_collapsed = not collapsed
-        label = "Show Inputs ▶" if new_collapsed else "Hide Inputs ◀"
-
-        # dashboard_col must exist in layout and be returned in student dict
-        # scale: 3 when expanded, 2 when normal (adjust as you like)
-        return (
-            gr.update(visible=not new_collapsed),                 # sidebar column visibility
-            new_collapsed,                                        # sidebar state
-            gr.update(value=label),                               # button text
-            gr.update(scale=3 if new_collapsed else 2),           # ✅ dashboard expands
-        )
-
-    # These keys MUST exist in create_ui_layout():
-    # student["sidebar_col"], student["sidebar_state"], student["sidebar_toggle_btn"], student["dashboard_col"]
-    student["sidebar_toggle_btn"].click(
-        fn=toggle_sidebar,
-        inputs=[student["sidebar_state"]],
-        outputs=[
-            student["sidebar_col"],
-            student["sidebar_state"],
-            student["sidebar_toggle_btn"],
-            student["dashboard_col"],
-        ],
-    )
-
-    # ------------------------------------------------------------------
     # Preset buttons (optional)
     # ------------------------------------------------------------------
-    # These keys must exist only if you created these buttons in the layout.
     if "preset_eng" in student:
         student["preset_eng"].click(fn=lambda: ["Engineering"], inputs=[], outputs=[student["interest_tags_input"]])
     if "preset_cs" in student:
@@ -204,21 +188,50 @@ def wire_events(components: dict, controllers: Controllers):
         student["preset_hs"].click(fn=lambda: ["Health Sciences"], inputs=[], outputs=[student["interest_tags_input"]])
 
     # ------------------------------------------------------------------
-    # Login
+    # Login -> show student section and reset to INPUTS view
     # ------------------------------------------------------------------
+    def start_and_reset(name: str):
+        login_update, student_update, welcome_md, sid = controllers.handle_start_session(name)
+
+        # force: show inputs page, hide outputs page, reset wizard to step 1
+        step = 1
+        step_updates = set_step(step)
+
+        return (
+            login_update,
+            student_update,
+            welcome_md,
+            sid,
+            gr.update(visible=True),     # inputs_view
+            gr.update(visible=False),    # outputs_view
+            *step_updates,               # wizard_step..generate_btn updates
+            gr.update(value="Fill earlier steps to preview here."),  # review_box
+        )
+
     login["start_btn"].click(
-        fn=controllers.handle_start_session,
+        fn=start_and_reset,
         inputs=[login["name_input"]],
         outputs=[
             login["section"],
             student["section"],
-            student["output_display"],  # Full plan markdown tab
+            student["output_display"],   # welcome text goes into Full Plan (hidden until outputs view, but ok)
             session_state,
+
+            student["inputs_view"],
+            student["outputs_view"],
+
+            student["wizard_step"],
+            student["step_label"],
+            student["step1"], student["step2"], student["step3"], student["step4"],
+            student["back_btn"], student["next_btn"],
+            student["generate_btn"],
+
+            student["review_box"],
         ],
     )
 
     # ------------------------------------------------------------------
-    # Generate Roadmap (renders dashboard blocks + full markdown)
+    # Generate Roadmap -> render + switch to OUTPUTS fullscreen
     # ------------------------------------------------------------------
     def generate_and_render(subjects, interest_tags, interest_details, extracurriculars, average, grade, location, preferences, session_id):
         tags = [t.strip() for t in (interest_tags or []) if t and t.strip()]
@@ -249,7 +262,14 @@ def wire_events(components: dict, controllers: Controllers):
         checklist_html = render_checklist(plan.get("phases", []) or [])
         full_md = plan.get("md", "") or ""
 
-        return timeline_html, programs_html, checklist_html, full_md
+        return (
+            timeline_html,
+            programs_html,
+            checklist_html,
+            full_md,
+            gr.update(visible=False),  # inputs_view OFF
+            gr.update(visible=True),   # outputs_view ON
+        )
 
     student["generate_btn"].click(
         fn=generate_and_render,
@@ -269,14 +289,37 @@ def wire_events(components: dict, controllers: Controllers):
             student["programs_display"],
             student["checklist_display"],
             student["output_display"],
+            student["inputs_view"],
+            student["outputs_view"],
         ],
     )
 
     # ------------------------------------------------------------------
-    # Clear form
+    # "Edit Inputs" button -> switch back to INPUTS fullscreen
     # ------------------------------------------------------------------
+    def show_inputs():
+        return gr.update(visible=True), gr.update(visible=False)
+
+    student["edit_inputs_btn"].click(
+        fn=show_inputs,
+        inputs=[],
+        outputs=[student["inputs_view"], student["outputs_view"]],
+    )
+
+    # ------------------------------------------------------------------
+    # Clear form (optional: also bring them back to step 1)
+    # ------------------------------------------------------------------
+    def clear_and_reset():
+        cleared = controllers.handle_clear_form()
+        step_updates = set_step(1)
+        return (
+            *cleared,
+            *step_updates,
+            gr.update(value="Fill earlier steps to preview here."),
+        )
+
     student["clear_btn"].click(
-        fn=controllers.handle_clear_form,
+        fn=clear_and_reset,
         inputs=[],
         outputs=[
             student["subjects_input"],
@@ -287,18 +330,22 @@ def wire_events(components: dict, controllers: Controllers):
             student["grade_input"],
             student["location_input"],
             student["preferences_input"],
+
+            student["wizard_step"],
+            student["step_label"],
+            student["step1"], student["step2"], student["step3"], student["step4"],
+            student["back_btn"], student["next_btn"],
+            student["generate_btn"],
+
+            student["review_box"],
         ],
     )
 
     # ------------------------------------------------------------------
-    # Follow-up
-    # NOTE:
-    # - If your controller signature is still (question, current_md, session_id),
-    #   you must pass current_md in inputs.
-    # - If you refactored it to (question, session_id) and return a plan dict, keep as is.
+    # Follow-up -> update outputs (keep outputs view visible)
+    # Controller signature assumed: (question, current_md, session_id)
     # ------------------------------------------------------------------
     def followup_and_render(question, current_md, session_id):
-        # If your controller expects 3 args:
         plan_raw = controllers.handle_followup(question, current_md, session_id)
         plan = safe_plan_dict(plan_raw)
 
@@ -335,11 +382,11 @@ def wire_events(components: dict, controllers: Controllers):
 
 
 if __name__ == "__main__":
-    app = create_app()
+    app, launch_kwargs = create_app()
     app.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
         show_error=True,
+        **launch_kwargs,
     )
-

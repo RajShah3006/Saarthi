@@ -1,7 +1,8 @@
-# controllers.py
+# controllers.py - Thin handlers that delegate to services (DICT plan output)
+
 import logging
 import traceback
-from typing import Tuple, List, Any, Dict
+from typing import Tuple, Any, Dict, List
 
 import gradio as gr
 
@@ -17,14 +18,22 @@ logger = logging.getLogger("saarthi.controllers")
 
 
 class Controllers:
+    """Thin controller layer - validates input, calls services, returns structured plan dict"""
+
     def __init__(self, config: Config):
         self.config = config
+
+        # Initialize services
         self.session_manager = SessionManager(config)
         self.llm_client = LLMClient(config)
         self.program_search = ProgramSearchService(config)
         self.roadmap_service = RoadmapService(config, self.llm_client, self.program_search)
 
+    # -------------------------------------------------------
+    # LOGIN
+    # -------------------------------------------------------
     def handle_start_session(self, name: str) -> Tuple[Any, Any, str, str]:
+        """Start a new session (no auth, just session tracking)"""
         try:
             name = Validators.sanitize_text(name, max_length=50) or "Student"
             session = self.session_manager.create_session(name)
@@ -37,22 +46,15 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
 **Tips for best results:**
 - Be specific about your interests
 - Include all relevant subjects
-- Mention anything important in preferences (optional)
+- Mention your extracurricular activities
 
 *Session ID: {session.id[:8]}...*
 """
-
-            # reset structured session state
-            session.last_plan_md = welcome_message
-            session.last_ui_programs = []
-            session.last_phases = []
-            session.last_profile_ui = {}
-
             return (
-                gr.update(visible=False),
-                gr.update(visible=True),
-                welcome_message,
-                session.id,
+                gr.update(visible=False),   # Hide login
+                gr.update(visible=True),    # Show student dashboard
+                welcome_message,            # Markdown to show in Full Plan when outputs view opens
+                session.id,                 # Session state
             )
 
         except Exception as e:
@@ -64,6 +66,9 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 "",
             )
 
+    # -------------------------------------------------------
+    # ROADMAP GENERATION (returns DICT plan)
+    # -------------------------------------------------------
     def handle_generate_roadmap(
         self,
         subjects: List[str],
@@ -75,11 +80,24 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         preferences: str,
         session_id: str,
     ) -> Dict[str, Any]:
+        """
+        Returns a plan dict:
+        {
+          "md": "...",
+          "profile": {...},
+          "programs": [...],
+          "phases": [...]
+        }
+        """
         try:
             session = self.session_manager.get_session(session_id)
             if not session:
-                msg = "⚠️ Session expired. Please refresh the page to start a new session."
-                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+                return {
+                    "md": "⚠️ Session expired. Please refresh the page to start a new session.",
+                    "profile": {},
+                    "programs": [],
+                    "phases": [],
+                }
 
             validation = Validators.validate_profile_inputs(
                 interests=interests,
@@ -90,8 +108,12 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 config=self.config,
             )
             if not validation.ok:
-                msg = f"⚠️ **Validation Error**\n\n{validation.message}"
-                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+                return {
+                    "md": f"⚠️ **Validation Error**\n\n{validation.message}",
+                    "profile": {},
+                    "programs": [],
+                    "phases": [],
+                }
 
             profile = StudentProfile(
                 name=session.name,
@@ -106,88 +128,158 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
 
             result = self.roadmap_service.generate(profile, session)
             if not result.ok:
-                msg = f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*"
-                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+                return {
+                    "md": f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*",
+                    "profile": {},
+                    "programs": [],
+                    "phases": [],
+                }
 
+            # Store session context
             session.last_profile = profile
 
             ui_programs = (result.data or {}).get("programs", []) or []
             ui_phases = (result.data or {}).get("phases", []) or []
+
+            # store for followup rendering
+            session.last_programs = ui_programs
+            session.last_phases = ui_phases  # dynamic attr is fine (dataclass has no slots)
+            session.last_md = result.message  # dynamic attr
+
             ui_profile = {
                 "interest": profile.interests,
                 "grade": profile.grade,
                 "avg": profile.average,
                 "subjects": ", ".join(profile.subjects[:5]) if profile.subjects else "",
+                "location": profile.location or "",
+                "preferences": profile.preferences or "",
+                "extracurriculars": profile.extracurriculars or "",
             }
 
-            session.last_ui_programs = ui_programs
-            session.last_phases = ui_phases
-            session.last_profile_ui = ui_profile
-            session.last_plan_md = result.message
-
             return {
-                "md": result.message,
+                "md": result.message or "",
+                "profile": ui_profile,
                 "programs": ui_programs,
                 "phases": ui_phases,
-                "profile": ui_profile,
             }
 
         except Exception as e:
             error_id = str(hash(str(e)))[:8]
             logger.error(f"Generate roadmap error [{error_id}]: {e}\n{traceback.format_exc()}")
-            msg = (
-                "❌ **Unexpected Error**\n\n"
-                "Something went wrong. Please try again.\n\n"
-                f"*Error ID: {error_id}*"
-            )
-            return {"md": msg, "programs": [], "phases": [], "profile": {}}
+            return {
+                "md": (
+                    "❌ **Unexpected Error**\n\n"
+                    "Something went wrong. Please try again.\n\n"
+                    f"*Error ID: {error_id}*"
+                ),
+                "profile": {},
+                "programs": [],
+                "phases": [],
+            }
 
-    def handle_followup(self, question: str, session_id: str) -> Dict[str, Any]:
+    # -------------------------------------------------------
+    # FOLLOWUP (keeps programs/phases stable; only appends Q&A)
+    # signature matches app.py: (question, current_md, session_id)
+    # -------------------------------------------------------
+    def handle_followup(self, question: str, current_md: str, session_id: str) -> Dict[str, Any]:
         try:
-            session = self.session_manager.get_session(session_id)
-            if not session:
-                msg = "⚠️ Session expired. Please refresh to continue."
-                return {"md": msg, "programs": [], "phases": [], "profile": {}}
+            base_md = (current_md or "").strip()
 
-            question = (question or "").strip()
-            if not question:
-                # just re-render last plan
+            if not question or not question.strip():
+                # no changes, return what we have
                 return {
-                    "md": session.last_plan_md or "",
-                    "programs": session.last_ui_programs or [],
-                    "phases": session.last_phases or [],
-                    "profile": session.last_profile_ui or {},
+                    "md": base_md,
+                    "profile": self._session_profile(session_id),
+                    "programs": self._session_programs(session_id),
+                    "phases": self._session_phases(session_id),
                 }
 
-            question = Validators.sanitize_text(question, self.config.MAX_FOLLOWUP_LENGTH)
+            session = self.session_manager.get_session(session_id)
+            if not session:
+                return {
+                    "md": base_md + "\n\n⚠️ Session expired. Please refresh to continue.",
+                    "profile": {},
+                    "programs": [],
+                    "phases": [],
+                }
 
-            result = self.roadmap_service.followup(question, session)
+            q = Validators.sanitize_text(question, self.config.MAX_FOLLOWUP_LENGTH)
+
+            result = self.roadmap_service.followup(q, session)
             if not result.ok:
-                session.last_plan_md = (session.last_plan_md or "") + f"\n\n❌ {result.message}"
+                return {
+                    "md": base_md + f"\n\n❌ {result.message}",
+                    "profile": self._session_profile(session_id),
+                    "programs": self._session_programs(session_id),
+                    "phases": self._session_phases(session_id),
+                }
+
+            # Append Q&A WITHOUT triggering any re-parsing/deduping
+            if "## Q&A" in base_md:
+                new_md = base_md + f"\n\n**You:** {q}\n\n**Saarthi:** {result.message}\n"
             else:
-                base = session.last_plan_md or ""
-                session.last_plan_md = f"{base}\n\n---\n\n**You:** {question}\n\n**Saarthi:** {result.message}"
+                new_md = base_md + f"\n\n---\n\n## Q&A\n\n**You:** {q}\n\n**Saarthi:** {result.message}\n"
+
+            # Keep the same structured plan; only md changes
+            session.last_md = new_md
 
             return {
-                "md": session.last_plan_md,
-                "programs": session.last_ui_programs or [],
-                "phases": session.last_phases or [],
-                "profile": session.last_profile_ui or {},
+                "md": new_md,
+                "profile": self._session_profile(session_id),
+                "programs": self._session_programs(session_id),
+                "phases": self._session_phases(session_id),
             }
 
         except Exception as e:
             logger.error(f"Followup error: {e}\n{traceback.format_exc()}")
-            msg = (session.last_plan_md if session else "") + f"\n\n❌ Error processing question: {str(e)}"
-            return {"md": msg, "programs": [], "phases": [], "profile": {}}
+            return {
+                "md": (current_md or "") + f"\n\n❌ Error processing question: {str(e)}",
+                "profile": self._session_profile(session_id),
+                "programs": self._session_programs(session_id),
+                "phases": self._session_phases(session_id),
+            }
 
+    # -------------------------------------------------------
+    # CLEAR FORM
+    # -------------------------------------------------------
     def handle_clear_form(self) -> Tuple:
         return (
-            [],
-            [],
-            "",
-            "",
-            85,
-            "Grade 12",
-            "",
-            "",
+            [],         # subjects
+            [],         # interest tags
+            "",         # interest details
+            "",         # extracurriculars
+            85,         # average (default)
+            "Grade 12", # grade (default)
+            "",         # location
+            "",         # preferences
         )
+
+    # -------------------------------------------------------
+    # Session helpers
+    # -------------------------------------------------------
+    def _session_programs(self, session_id: str) -> List[dict]:
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return []
+        return getattr(session, "last_programs", []) or []
+
+    def _session_phases(self, session_id: str) -> List[dict]:
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return []
+        return getattr(session, "last_phases", []) or []
+
+    def _session_profile(self, session_id: str) -> Dict[str, Any]:
+        session = self.session_manager.get_session(session_id)
+        if not session or not session.last_profile:
+            return {}
+        p = session.last_profile
+        return {
+            "interest": p.interests,
+            "grade": p.grade,
+            "avg": p.average,
+            "subjects": ", ".join(p.subjects[:5]) if p.subjects else "",
+            "location": p.location or "",
+            "preferences": p.preferences or "",
+            "extracurriculars": p.extracurriculars or "",
+        }
