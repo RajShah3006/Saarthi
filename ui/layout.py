@@ -51,75 +51,74 @@ def create_ui_layout(config: Config) -> dict:
             with gr.Column(elem_id="sidebar_col", scale=1, min_width=320) as sidebar_col:
                 gr.HTML(f"<div class='status-badge'>{status_text}</div>")
 
-                with gr.Accordion("1) Academics", open=True):
-                    subjects_input = gr.Dropdown(
-                        choices=COURSES,
-                        multiselect=True,
-                        label="Current/Planned Subjects",
-                        info="Select courses you're taking or plan to take",
-                        elem_classes="glass-input"
-                    )
-
-                    with gr.Row():
-                        average_input = gr.Slider(
-                            minimum=50, maximum=100, value=85, step=1,
-                            label="Current Average %"
+                                # --- Wizard state ---
+                wizard_step = gr.State(1)
+                
+                with gr.Column(scale=1, min_width=320) as sidebar_col:
+                    gr.Markdown(f"**Status:** {status_text}")
+                
+                    step_label = gr.Markdown("**Step 1 of 4**")
+                
+                    # STEP 1: Basics
+                    with gr.Column(visible=True) as step1:
+                        gr.Markdown("### 1) Basics")
+                        with gr.Row():
+                            average_input = gr.Slider(50, 100, value=85, step=1, label="Current Average %")
+                            grade_input = gr.Dropdown(choices=config.GRADE_OPTIONS, value="Grade 12", label="Grade Level")
+                        location_input = gr.Textbox(label="Location", placeholder="e.g., Toronto, ON", elem_classes="glass-input")
+                
+                    # STEP 2: Academics
+                    with gr.Column(visible=False) as step2:
+                        gr.Markdown("### 2) Academics")
+                        subjects_input = gr.Dropdown(
+                            choices=COURSES,
+                            multiselect=True,
+                            label="Current/Planned Subjects",
+                            info="Select courses you're taking or plan to take",
+                            elem_classes="glass-input"
                         )
-                        grade_input = gr.Dropdown(
-                            choices=config.GRADE_OPTIONS,
-                            value="Grade 12",
-                            label="Grade Level"
+                
+                    # STEP 3: Interests & Extras
+                    with gr.Column(visible=False) as step3:
+                        gr.Markdown("### 3) Interests & Extras")
+                        interest_tags_input = gr.CheckboxGroup(
+                            choices=INTEREST_AREAS,
+                            label="Interest Areas *",
+                            info="Pick a few (2–4). If unsure, pick your best guess.",
                         )
-
-                with gr.Accordion("2) Interests", open=True):
-                    interest_tags_input = gr.CheckboxGroup(
-                        choices=INTEREST_AREAS,
-                        label="Interest Areas *",
-                        info="Pick a few (2–4). If unsure, pick your best guess.",
-                    )
-
-                    interest_details_input = gr.Textbox(
-                        label="Interest Details (optional)",
-                        placeholder="e.g., AI + robotics, neuroscience, entrepreneurship",
-                        elem_classes="glass-input",
-                        lines=2
-                    )
-
+                        interest_details_input = gr.Textbox(
+                            label="Interest Details (optional)",
+                            placeholder="e.g., AI + robotics, neuroscience, entrepreneurship",
+                            elem_classes="glass-input",
+                            lines=2
+                        )
+                        extracurriculars_input = gr.Textbox(
+                            label="Extracurricular Activities",
+                            placeholder="e.g., Robotics Club, Debate Team, Volunteering",
+                            elem_classes="glass-input",
+                            lines=2
+                        )
+                        preferences_input = gr.Textbox(
+                            label="Preferences (optional)",
+                            placeholder="e.g., close to home, scholarships, smaller campus",
+                            elem_classes="glass-input",
+                            lines=2
+                        )
+                
+                    # STEP 4: Review
+                    with gr.Column(visible=False) as step4:
+                        gr.Markdown("### 4) Review")
+                        review_box = gr.Markdown("Fill earlier steps to preview here.", elem_classes="output-box")
+                
+                    # Nav buttons
                     with gr.Row():
-                        preset_eng = gr.Button("Engineering", elem_classes="chip-btn")
-                        preset_cs  = gr.Button("Computer Science", elem_classes="chip-btn")
-                        preset_bus = gr.Button("Business/Commerce", elem_classes="chip-btn")
-                        preset_hs  = gr.Button("Health Sciences", elem_classes="chip-btn")
-
-
-                with gr.Accordion("3) Extras & Preferences", open=False):
-                    extracurriculars_input = gr.Textbox(
-                        label="Extracurricular Activities",
-                        placeholder="e.g., Robotics Club, Debate Team, Volunteering",
-                        elem_classes="glass-input",
-                        lines=2
-                    )
-
-                    location_input = gr.Textbox(
-                        label="Location",
-                        placeholder="e.g., Toronto, ON",
-                        elem_classes="glass-input"
-                    )
-
-                    preferences_input = gr.Textbox(
-                        label="Preferences (optional)",
-                        placeholder="e.g., prefer close to home, scholarship important, smaller campus, etc.",
-                        elem_classes="glass-input",
-                        lines=2
-                    )
-
-                with gr.Row():
+                        back_btn = gr.Button("← Back", elem_classes="secondary-btn", visible=False)
+                        next_btn = gr.Button("Next →", elem_classes="secondary-btn", visible=True)
+                
+                    # Generate
+                    generate_btn = gr.Button("Generate Roadmap", variant="primary", elem_classes="primary-btn")
+                
                     clear_btn = gr.Button("Clear", elem_classes="secondary-btn")
-                    generate_btn = gr.Button(
-                        "Generate Roadmap",
-                        variant="primary",
-                        elem_classes="primary-btn"
-                    )
 
             # Right: Roadmap Dashboard
             with gr.Column(elem_id="main_col", scale=3, min_width=700) as main_col:
@@ -207,6 +206,15 @@ def create_ui_layout(config: Config) -> dict:
 
             "followup_input": followup_input,
             "send_btn": send_btn,
+
+            "wizard_step": wizard_step,
+            "step_label": step_label,
+            "step1": step1, "step2": step2, "step3": step3, "step4": step4,
+            "review_box": review_box,
+            "back_btn": back_btn,
+            "next_btn": next_btn,
+            "sidebar_col": sidebar_col,
+
         },
         "admin": {
             "section": admin_section,
