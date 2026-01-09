@@ -406,29 +406,43 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     # ---------- generate ----------
     def generate_and_show(
         grade, average, location,
-        tags, details, interests_str, 
+        tags, details,
         subjects, extracurriculars, preferences,
         wants_email, student_email,
         sess_id, student_name
     ):
         tags = tags or []
         details = (details or "").strip()
-
-        # interests string used by your backend
-        interests_str = ", ".join(tags)
-        if details:
-            interests_str = f"{interests_str}; Details: {details}"
-
+    
+        # ✅ Build interests string consistently
+        if tags and details:
+            interests_str = f"{', '.join(tags)}; Details: {details}"
+        elif tags:
+            interests_str = ", ".join(tags)
+        else:
+            interests_str = details
+    
+        # ✅ validate email if wants_email
         if wants_email and not valid_email(student_email):
+            # Must return 15 outputs (match your outputs list)
             return (
                 gr.update(value="❌ Please enter a valid email."),
-                gr.update(), gr.update(), gr.update(),
+                gr.update(value=""),
+                gr.update(value=""),
+                gr.update(visible=True),
+                gr.update(visible=False),
                 "inputs",
-                gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(),
+                gr.update(value="", visible=False),
+                gr.update(visible=True),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(value=[]),
+                gr.update(choices=[], value=[]),
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
             )
-
+    
         created = store.create_submission({
             "student_name": student_name or "Student",
             "student_email": (student_email or "").strip(),
@@ -436,54 +450,60 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "grade": grade,
             "average": float(average),
             "subjects": subjects or [],
-            "interests": ", ".join(tags),
-            "interest_details": details,
+            "interests": interests_str,  # ✅ store the combined string
             "extracurriculars": extracurriculars or "",
             "location": location or "",
             "preferences": preferences or "",
         })
-
+    
         resume_code = f"{created['id']}:{created['resume_token']}"
-
+    
+        # ✅ Create GitHub issue ONLY if wants_email (and fix NameError)
         if wants_email:
-            issue_no, issue_url, assignee = gh.create_email_request_issue(
-                submission_id=created["id"],
-                resume_code=resume_code,
-                grade=str(grade),
-                average=float(average),
-                interests=str(interests),
-            )
-            if issue_no:
-                store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
-
-
+            try:
+                issue_no, issue_url, assignee = gh.create_email_request_issue(
+                    submission_id=created["id"],
+                    resume_code=resume_code,
+                    grade=str(grade),
+                    average=float(average),
+                    interests=interests_str,  # ✅ FIXED (was interests=str(interests))
+                )
+                if issue_no:
+                    store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
+            except Exception as e:
+                logger.exception("GitHub issue creation failed: %s", e)
+                # Optional: store github error status if you support it
+                try:
+                    store.set_github_status(int(created["id"]), "status:ERROR")
+                except Exception:
+                    pass
+    
+        # Generate roadmap (you already hide outputs if wants_email)
         plan_raw = controllers.handle_generate_roadmap(
             subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
         )
         plan = safe_plan_dict(plan_raw)
-
+    
         programs = plan.get("programs", []) or []
         timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
         projects = plan.get("projects", []) or []
         full_md = plan.get("md", "") or ""
-
-        # profile for timeline chips
+    
         profile = plan.get("profile") or {
             "interest": interests_str,
             "grade": grade,
             "avg": average,
             "subjects": ", ".join((subjects or [])[:6]),
         }
-
+    
         store.save_generated_plan(
             created["id"], full_md, programs, timeline_events, projects, actor="student"
         )
-
-        code = f"{created['id']}:{created['resume_token']}"
-        note = f"**Resume code:** `{code}`"
+    
+        note = f"**Resume code:** `{resume_code}`"
         choices = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
-
-        # If email requested → DO NOT show roadmap
+    
+        # If email requested → do NOT show dashboard
         if wants_email:
             notice = (
                 "✅ **Request received!**  \n\n"
@@ -491,39 +511,39 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 f"{note}"
             )
             return (
-                gr.update(value=""),                 # wizard_error clear
-                gr.update(value=note),               # submission code (still useful)
-                gr.update(value=code),               # hidden localStorage store
-                gr.update(visible=False),            # inputs_view
-                gr.update(visible=True),             # outputs_view
-                "outputs",
+                gr.update(value=""),                    # wizard_error
+                gr.update(value=note),                  # submission_code_out
+                gr.update(value=resume_code),           # resume_code_store
+                gr.update(visible=False),               # inputs_view
+                gr.update(visible=True),                # outputs_view
+                "outputs",                              # view_state
                 gr.update(value=notice, visible=True),  # email_only_notice
-                gr.update(visible=False),               # dashboard_wrap hidden
-                "", "", "", "",                          # timeline/programs/checklist/fullmd not shown
-                gr.update(value=programs),               # programs_state
+                gr.update(visible=False),               # dashboard_wrap
+                "", "", "", "",                         # timeline/programs/checklist/fullmd hidden
+                gr.update(value=programs),              # programs_state
                 gr.update(choices=choices, value=[]),
                 gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
             )
-
+    
         # else show full dashboard
         timeline_html = render_timeline(profile, timeline_events)
         programs_html = render_program_cards(programs)
         checklist_html = render_checklist(projects)
-
+    
         return (
-            gr.update(value=""),                 # wizard_error clear
-            gr.update(value=note),               # submission code out
-            gr.update(value=code),               # hidden localStorage store
+            gr.update(value=""),                 # wizard_error
+            gr.update(value=note),               # submission_code_out
+            gr.update(value=resume_code),        # resume_code_store
             gr.update(visible=False),            # inputs_view
             gr.update(visible=True),             # outputs_view
             "outputs",
-            gr.update(value="", visible=False),  # email_only_notice hidden
-            gr.update(visible=True),             # dashboard_wrap visible
+            gr.update(value="", visible=False),  # email_only_notice
+            gr.update(visible=True),             # dashboard_wrap
             timeline_html,
             programs_html,
             checklist_html,
             full_md,
-            gr.update(value=programs),           # programs_state
+            gr.update(value=programs),
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
@@ -751,11 +771,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         store.admin_save_email(int(submission_id), subject, body, actor=actor)
         sub = store.admin_get(int(submission_id))
         if sub and sub.get("github_issue_number"):
-            gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)
-            store.set_github_status(int(submission_id), "status:DRAFTED")
-        if sub and sub.get("github_issue_number"):
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+            try:
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)  # or SENT
+                store.set_github_status(int(submission_id), "status:DRAFTED")                        # or SENT
+            except Exception as e:
+                logger.exception("GitHub status update failed: %s", e)
                 store.set_github_status(int(submission_id), "status:ERROR")
+
         store.log_action(int(submission_id), actor, "AUTOFILL_EMAIL", "Generated email draft")
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
@@ -772,11 +794,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         store.admin_save_email(int(submission_id), subject or "", body or "", actor=actor)
         sub = store.admin_get(int(submission_id))
         if sub and sub.get("github_issue_number"):
-            gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)
-            store.set_github_status(int(submission_id), "status:DRAFTED")
-        if sub and sub.get("github_issue_number"):
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+            try:
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)  # or SENT
+                store.set_github_status(int(submission_id), "status:DRAFTED")                        # or SENT
+            except Exception as e:
+                logger.exception("GitHub status update failed: %s", e)
                 store.set_github_status(int(submission_id), "status:ERROR")
+
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
         return "✅ Draft saved.", actions_table
@@ -792,11 +816,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         store.admin_mark_sent(int(submission_id), actor=actor)
         sub = store.admin_get(int(submission_id))
         if sub and sub.get("github_issue_number"):
-            gh.set_issue_status(int(sub["github_issue_number"]), "status:SENT", close=True)
-            store.set_github_status(int(submission_id), "status:SENT")
-        if sub and sub.get("github_issue_number"):
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+            try:
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:SENT", close=True)  # or SENT
+                store.set_github_status(int(submission_id), "status:SENT")                        # or SENT
+            except Exception as e:
+                logger.exception("GitHub status update failed: %s", e)
                 store.set_github_status(int(submission_id), "status:ERROR")
+
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
         return "✅ Marked as SENT.", actions_table
