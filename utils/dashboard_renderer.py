@@ -75,21 +75,23 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
 
 # ✅ Checklist now expects "projects" (unique from timeline)
 # (still compatible with old "phases" if needed)
-def render_checklist(sections: List[Dict[str, Any]]) -> str:
-    if not sections:
+def render_checklist(projects):
+    if not projects:
         return "<div class='card-empty'>No checklist yet.</div>"
 
     blocks = []
-    for sec in sections[:8]:
-        title = sec.get("title", "Checklist")
-        items = sec.get("items", []) or []
+    for pr in projects[:6]:
+        title = pr.get("title", "Checklist")
+        items = pr.get("items", []) or []
+
         checks = "".join(
             f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>"
             for it in items[:12]
         )
+
         blocks.append(f"""
           <div class="phase">
-            <div class="phase-title">{_esc(title)}</div>
+            <div class="phase-title">✅ {_esc(title)}</div>
             <div class="chk-wrap">{checks}</div>
           </div>
         """)
@@ -97,15 +99,14 @@ def render_checklist(sections: List[Dict[str, Any]]) -> str:
     return f"<div class='phase-wrap'>{''.join(blocks)}</div>"
 
 
-# ✅ Timeline now expects "timeline_events" (dated milestones)
-# Fallback: if you pass old "phases", it will still render.
 def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any]]) -> str:
+    # Profile chips
     chips = []
     if profile.get("interest"):
         chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
     if profile.get("grade"):
         g = profile["grade"]
-        if profile.get("avg") is not None:
+        if profile.get("avg") is not None and profile.get("avg") != "":
             g = f"{g} • {profile['avg']}%"
         chips.append(f"<span class='chip'>📊 {_esc(g)}</span>")
     if profile.get("subjects"):
@@ -121,21 +122,20 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
         """
 
     if not timeline_events:
-        return f"<div class='timeline-wrap'>{header}<div class='card-empty'>Generate a roadmap to see your timeline.</div></div>"
+        return f"<div class='timeline-wrap'>{header}<div class='card-empty'>Generate a roadmap to see a timeline.</div></div>"
 
     items_html = []
-    for ev in timeline_events[:10]:
-        d = ev.get("date", "") or ""
-        title = ev.get("title", "") or ev.get("title", "")
+    for ev in timeline_events[:8]:
+        d = ev.get("date", "")
+        title = ev.get("title", "")
         items = ev.get("items", []) or []
         li = "".join([f"<li>{_esc(x)}</li>" for x in items[:7]])
 
-        t_title = f"{d} — {title}".strip(" —")
         items_html.append(f"""
         <div class="t-item">
           <div class="t-dot"></div>
           <div class="t-card">
-            <div class="t-title">{_esc(t_title)}</div>
+            <div class="t-title">{_esc(d)} — {_esc(title)}</div>
             <ul class="t-list">{li}</ul>
           </div>
         </div>
@@ -144,7 +144,7 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
     return f"""
     <div class="timeline-wrap">
       {header}
-      <div class="timeline-head">Application Timeline</div>
+      <div class="timeline-head">OUAC Timeline</div>
       <div class="timeline">{''.join(items_html)}</div>
     </div>
     """

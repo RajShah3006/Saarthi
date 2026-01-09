@@ -50,23 +50,41 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
 
     # ---------------- Helpers ----------------
     def safe_plan_dict(plan: Any) -> Dict[str, Any]:
-        # New format preferred:
-        # {"md":..., "profile":..., "programs":..., "timeline_events":..., "projects":...}
+        """
+        Handles multiple controller return shapes:
+        - dict directly (preferred)
+        - dict with nested 'data'
+        - tuple/list legacy
+        - markdown string fallback
+        """
         if isinstance(plan, dict):
+            # If controller returns {"message":..., "data": {...}}, flatten it
+            data = plan.get("data")
+            if isinstance(data, dict):
+                merged = dict(data)
+                # allow top-level keys like md/message to override if present
+                if "md" in plan:
+                    merged["md"] = plan.get("md")
+                if "message" in plan and "md" not in merged:
+                    merged["md"] = plan.get("message")
+                return merged
+    
+            # also allow "message" to map to "md"
+            if "message" in plan and "md" not in plan:
+                plan = dict(plan)
+                plan["md"] = plan.get("message") or ""
             return plan
     
-        # legacy tuple: (md, programs, phases, profile)
         if isinstance(plan, (list, tuple)) and len(plan) == 4:
             md, programs, phases, profile = plan
             return {
                 "md": md or "",
                 "programs": programs or [],
-                "phases": phases or [],
+                "projects": phases or [],  # treat old phases as projects
                 "profile": profile or {},
             }
     
-        # fallback: treat as markdown string
-        return {"md": plan or "", "profile": {}, "programs": [], "phases": [], "timeline_events": [], "projects": []}
+        return {"md": plan or "", "profile": {}, "programs": [], "timeline_events": [], "projects": []}
 
     def build_timeline_events() -> List[Dict[str, Any]]:
         today = date.today()
@@ -159,6 +177,22 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
+    login["resume_btn"].click(
+        fn=on_resume,
+        inputs=[login["resume_code_input"]],
+        outputs=[
+            login["resume_status"],
+            student["submission_code_out"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+        ],
+    )
+
     # ---------------- Wizard nav ----------------
     def set_step(step: int):
         step = max(1, min(4, int(step)))
@@ -228,34 +262,47 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     def on_resume(code: str):
         sid, token = parse_resume_code(code)
         if not sid or not token:
-            return gr.update(value="❌ Invalid code. Use format: `id:token`"), gr.update()
-
+            return (
+                gr.update(value="❌ Invalid code. Use format: `id:token`"),
+                gr.update(),                 # submission_code_out
+                gr.update(visible=True),     # inputs_view stays
+                gr.update(visible=False),    # outputs_view stays hidden
+                "inputs",                    # view_state
+                gr.update(), gr.update(), gr.update(), gr.update()
+            )
+    
         sub = store.get_by_resume_code(sid, token)
         if not sub:
-            return gr.update(value="❌ Not found. Check the code again."), gr.update()
-
+            return (
+                gr.update(value="❌ Not found. Check the code again."),
+                gr.update(),                 # submission_code_out
+                gr.update(visible=True),     # inputs_view stays
+                gr.update(visible=False),    # outputs_view stays hidden
+                "inputs",                    # view_state
+                gr.update(), gr.update(), gr.update(), gr.update()
+            )
+    
         sub_u = store.unpack(sub)
-        # Switch to outputs view and render
-        plan = {
-            "md": sub_u.get("roadmap_md", ""),
-            "profile": {
-                "interest": sub_u.get("interests", ""),
-                "grade": sub_u.get("grade", ""),
-                "avg": sub_u.get("average", ""),
-                "subjects": ", ".join(sub_u.get("subjects", [])[:5]),
-            },
-            "programs": sub_u.get("ui_programs", []),
-            "phases": sub_u.get("ui_phases", []),
+    
+        plan_md = sub_u.get("roadmap_md", "") or ""
+        programs = sub_u.get("ui_programs", []) or []
+        projects = sub_u.get("ui_phases", []) or []   # you stored projects into ui_phases_json
+    
+        profile = {
+            "interest": sub_u.get("interests", ""),
+            "grade": sub_u.get("grade", ""),
+            "avg": sub_u.get("average", ""),
+            "subjects": ", ".join((sub_u.get("subjects") or [])[:5]),
         }
-
-        timeline_events = plan.get("timeline_events") or build_timeline_events()
-        projects = plan.get("projects") or plan.get("phases") or []
-        
-        timeline_html = render_timeline(plan["profile"], timeline_events)
-        programs_html = render_program_cards(plan["programs"])
+    
+        # Timeline is computed (not stored) – fine
+        timeline_events = build_timeline_events()
+    
+        timeline_html = render_timeline(profile, timeline_events)
+        programs_html = render_program_cards(programs)
         checklist_html = render_checklist(projects)
-        full_md = plan["md"] or ""
-
+        full_md = plan_md
+    
         return (
             gr.update(value="✅ Loaded saved roadmap."),
             gr.update(value=f"**Resume code:** `{sid}:{token}`"),
@@ -267,22 +314,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             checklist_html,
             full_md,
         )
-
-    student["resume_btn"].click(
-        fn=on_resume,
-        inputs=[student["resume_code_input"]],
-        outputs=[
-            student["resume_status"],
-            student["submission_code_out"],
-            student["inputs_view"],
-            student["outputs_view"],
-            view_state,
-            student["timeline_display"],
-            student["programs_display"],
-            student["checklist_display"],
-            student["output_display"],
-        ],
-    )
 
     # ---------------- Generate (store + render + switch view) ----------------
     def generate_and_show(subjects, interest_tags, interest_details, extracurriculars, average, grade,
@@ -344,10 +375,25 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
 
         resume_code = f"{created['id']}:{created['resume_token']}"
         note = f"**Resume code:** `{resume_code}`"
+        
+        # EMAIL MODE: do not show roadmap UI, just confirm
         if wants_email:
-            note += "\n\n✅ Email requested. A team member will review and send it."
-
-        # 4) switch to outputs-only view
+            confirm = (
+                note
+                + "\n\n✅ Request received.\n"
+                  "A team member will review your plan and email you after approval."
+            )
+            return (
+                gr.update(value=""),                  # resume_status clear
+                gr.update(value=confirm),             # submission_code_out
+                gr.update(visible=True),              # keep inputs_view visible
+                gr.update(visible=False),             # outputs_view hidden
+                "inputs",
+                gr.update(), gr.update(), gr.update(),  # timeline/programs/checklist untouched
+                gr.update(value=""),                  # full_md blank
+            )
+        
+        # DISPLAY MODE: show dashboard
         return (
             gr.update(value=""),                 # resume_status clear
             gr.update(value=note),               # submission_code_out
