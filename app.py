@@ -5,6 +5,7 @@ import sys
 import re
 from typing import Any, Dict, Tuple, List
 from datetime import date, timedelta
+from services.github_issues import GitHubIssuesClient
 
 from config import Config
 from controllers import Controllers
@@ -26,6 +27,7 @@ store = SubmissionStore()
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+gh = GitHubIssuesClient()
 
 def create_app() -> gr.Blocks:
     config = Config()
@@ -404,7 +406,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     # ---------- generate ----------
     def generate_and_show(
         grade, average, location,
-        tags, details,
+        tags, details, interests_str, 
         subjects, extracurriculars, preferences,
         wants_email, student_email,
         sess_id, student_name
@@ -440,6 +442,20 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "location": location or "",
             "preferences": preferences or "",
         })
+
+        resume_code = f"{created['id']}:{created['resume_token']}"
+
+        if wants_email:
+            issue_no, issue_url, assignee = gh.create_email_request_issue(
+                submission_id=created["id"],
+                resume_code=resume_code,
+                grade=str(grade),
+                average=float(average),
+                interests=str(interests),
+            )
+            if issue_no:
+                store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
+
 
         plan_raw = controllers.handle_generate_roadmap(
             subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
@@ -733,6 +749,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         actor = (admin_name or "").strip() or "admin"
 
         store.admin_save_email(int(submission_id), subject, body, actor=actor)
+        sub = store.admin_get(int(submission_id))
+        if sub and sub.get("github_issue_number"):
+            gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)
+            store.set_github_status(int(submission_id), "status:DRAFTED")
+        if sub and sub.get("github_issue_number"):
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+                store.set_github_status(int(submission_id), "status:ERROR")
         store.log_action(int(submission_id), actor, "AUTOFILL_EMAIL", "Generated email draft")
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
@@ -747,6 +770,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     def admin_save(submission_id: float, subject: str, body: str, admin_name: str):
         actor = (admin_name or "").strip() or "admin"
         store.admin_save_email(int(submission_id), subject or "", body or "", actor=actor)
+        sub = store.admin_get(int(submission_id))
+        if sub and sub.get("github_issue_number"):
+            gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)
+            store.set_github_status(int(submission_id), "status:DRAFTED")
+        if sub and sub.get("github_issue_number"):
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+                store.set_github_status(int(submission_id), "status:ERROR")
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
         return "✅ Draft saved.", actions_table
@@ -760,6 +790,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     def admin_mark_sent(submission_id: float, admin_name: str):
         actor = (admin_name or "").strip() or "admin"
         store.admin_mark_sent(int(submission_id), actor=actor)
+        sub = store.admin_get(int(submission_id))
+        if sub and sub.get("github_issue_number"):
+            gh.set_issue_status(int(sub["github_issue_number"]), "status:SENT", close=True)
+            store.set_github_status(int(submission_id), "status:SENT")
+        if sub and sub.get("github_issue_number"):
+                gh.set_issue_status(int(sub["github_issue_number"]), "status:ERROR", close=False)
+                store.set_github_status(int(submission_id), "status:ERROR")
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
         return "✅ Marked as SENT.", actions_table
@@ -769,7 +806,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         inputs=[student["review_id"], student["admin_name"]],
         outputs=[student["admin_status"], student["actions_table"]],
     )
-
 
 if __name__ == "__main__":
     app = create_app()
