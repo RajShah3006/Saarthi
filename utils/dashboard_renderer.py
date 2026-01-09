@@ -15,7 +15,7 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     for p in programs[:12]:
         name = p.get("program_name", "")
         uni = p.get("university_name", "")
-        pct = p.get("match_percent") or 0
+        pct = int(p.get("match_percent") or 0)
         coop = bool(p.get("co_op_available", False))
         adm = p.get("admission_average", "") or "Check website"
         pre = p.get("prerequisites", "") or "Check website"
@@ -34,14 +34,8 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
             miss_chips = f"<div class='chip-row chip-row-tight'>{chips}</div>"
 
         meta_rows = []
-        if adm:
-            meta_rows.append(
-                f"<div class='meta-row'><span>📝 Admission</span><span>{_esc(adm)}</span></div>"
-            )
-        if pre:
-            meta_rows.append(
-                f"<div class='meta-row'><span>📚 Prereqs</span><span>{_esc(pre)}</span></div>"
-            )
+        meta_rows.append(f"<div class='meta-row'><span>📝 Admission</span><span>{_esc(adm)}</span></div>")
+        meta_rows.append(f"<div class='meta-row'><span>📚 Prereqs</span><span>{_esc(pre)}</span></div>")
 
         coop_html = "<span class='pill'>✅ Co-op</span>" if coop else ""
         link_html = (
@@ -64,7 +58,7 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
           </div>
           {miss_chips}
           <div class="meta">
-            {''.join(meta_rows) if meta_rows else "<div class='meta-hint'>Details appear as available.</div>"}
+            {''.join(meta_rows)}
             {link_html}
           </div>
         </div>
@@ -73,25 +67,21 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     return f"<div class='prog-grid'>{''.join(cards)}</div>"
 
 
-# ✅ Checklist now expects "projects" (unique from timeline)
-# (still compatible with old "phases" if needed)
-def render_checklist(projects):
-    if not projects:
+def render_checklist(project_sections: List[Dict[str, Any]]) -> str:
+    if not project_sections:
         return "<div class='card-empty'>No checklist yet.</div>"
 
     blocks = []
-    for pr in projects[:6]:
-        title = pr.get("title", "Checklist")
-        items = pr.get("items", []) or []
-
+    for sec in project_sections[:8]:
+        title = sec.get("title", "Checklist")
+        items = sec.get("items", []) or []
         checks = "".join(
             f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>"
             for it in items[:12]
         )
-
         blocks.append(f"""
           <div class="phase">
-            <div class="phase-title">✅ {_esc(title)}</div>
+            <div class="phase-title">{_esc(title)}</div>
             <div class="chk-wrap">{checks}</div>
           </div>
         """)
@@ -100,13 +90,12 @@ def render_checklist(projects):
 
 
 def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any]]) -> str:
-    # Profile chips
     chips = []
     if profile.get("interest"):
         chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
     if profile.get("grade"):
         g = profile["grade"]
-        if profile.get("avg") is not None and profile.get("avg") != "":
+        if profile.get("avg") is not None and str(profile.get("avg")).strip() != "":
             g = f"{g} • {profile['avg']}%"
         chips.append(f"<span class='chip'>📊 {_esc(g)}</span>")
     if profile.get("subjects"):
@@ -125,12 +114,11 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
         return f"<div class='timeline-wrap'>{header}<div class='card-empty'>Generate a roadmap to see a timeline.</div></div>"
 
     items_html = []
-    for ev in timeline_events[:8]:
-        d = ev.get("date", "")
+    for ev in timeline_events[:10]:
         title = ev.get("title", "")
+        d = ev.get("date", "")
         items = ev.get("items", []) or []
-        li = "".join([f"<li>{_esc(x)}</li>" for x in items[:7]])
-
+        li = "".join([f"<li>{_esc(x)}</li>" for x in items[:8]])
         items_html.append(f"""
         <div class="t-item">
           <div class="t-dot"></div>
