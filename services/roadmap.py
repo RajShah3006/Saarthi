@@ -161,7 +161,6 @@ class RoadmapService:
 # services/roadmap.py
 import logging
 import re
-import json
 from datetime import date, timedelta
 from typing import List, Dict, Any
 
@@ -173,25 +172,14 @@ from prompts.templates import PromptTemplates
 
 logger = logging.getLogger("saarthi.roadmap")
 
-COURSE_CODE_RE = re.compile(r"\b([A-Za-z]{3}\d[A-Za-z])\b")  # e.g., MHF4U, SCH4U, SPH4U
-
+COURSE_CODE_RE = re.compile(r"\b([A-Za-z]{3}\d[A-Za-z])\b")
 
 def _parse_ouac_deadline() -> date:
-    """
-    Equal consideration is typically Jan 15.
-    If today passed, use next year's Jan 15.
-    """
     today = date.today()
-    yr = today.year
-    dl = date(yr, 1, 15)
+    dl = date(today.year, 1, 15)
     if today > dl:
-        dl = date(yr + 1, 1, 15)
+        dl = date(today.year + 1, 1, 15)
     return dl
-
-
-def _iso(d: date) -> str:
-    return d.isoformat()
-
 
 def _clean_course_codes(text: str) -> List[str]:
     if not text:
@@ -199,12 +187,11 @@ def _clean_course_codes(text: str) -> List[str]:
     hits = [m.group(1).upper() for m in COURSE_CODE_RE.finditer(text)]
     out, seen = [], set()
     for h in hits:
-        h = h.replace("O", "0")  # just in case
+        h = h.replace("O", "0")
         if h not in seen:
             seen.add(h)
             out.append(h)
     return out[:12]
-
 
 def _clean_prereq_display(text: str) -> str:
     codes = _clean_course_codes(text or "")
@@ -214,30 +201,6 @@ def _clean_prereq_display(text: str) -> str:
     s = re.sub(r",\s*,+", ", ", s).strip(" ,")
     return s[:180] + ("…" if len(s) > 180 else "")
 
-
-def _json_default(o):
-    """Allow json.dumps() to handle numpy-ish scalars, sets, bytes, etc."""
-    try:
-        import numpy as np
-        if isinstance(o, np.generic):
-            return o.item()
-        if isinstance(o, np.ndarray):
-            return o.tolist()
-    except Exception:
-        pass
-
-    if isinstance(o, set):
-        return list(o)
-
-    if isinstance(o, (bytes, bytearray)):
-        try:
-            return o.decode("utf-8")
-        except Exception:
-            return str(o)
-
-    return str(o)
-
-
 class RoadmapService:
     def __init__(self, config: Config, llm_client: LLMClient, program_search: ProgramSearchService):
         self.config = config
@@ -245,9 +208,6 @@ class RoadmapService:
         self.search = program_search
         self.prompts = PromptTemplates()
 
-    # =========================
-    # MAIN GENERATE
-    # =========================
     def generate(self, profile: StudentProfile, session: Session) -> ServiceResult:
         try:
             results = self.search.search_with_profile(profile, self.config.TOP_K_PROGRAMS)
@@ -256,40 +216,37 @@ class RoadmapService:
 
             programs_for_prompt = [p for p, _, _ in results]
 
-            # 1) AI ANALYSIS (content) — this is your “reasoning” section
+            # LLM analysis content (not formatting)
             prompt = self.prompts.roadmap_prompt(profile, programs_for_prompt)
             analysis = (self.llm.generate(prompt, self.prompts.roadmap_system_prompt()) or "").strip()
 
-            # 2) UI programs (cleaned + compact)
             ui_programs = [self._program_to_payload(p, score, bd) for (p, score, bd) in results]
 
-            # 3) UNIQUE TABS:
-            #    - timeline_events: dated milestones (today → Jan 15)
-            #    - projects: supplementary / portfolio checklist
             timeline_events = self._build_timeline(profile)
             projects = self._build_projects(profile)
 
-            # 4) Full plan markdown — AI formats only (no new facts)
-            full_md = self._format_full_plan_ai(profile, ui_programs, analysis, timeline_events, projects)
+            full_md = self._format_full_plan(profile, ui_programs, analysis, timeline_events, projects)
 
             return ServiceResult.success(
                 message=full_md,
                 data={
                     "md": full_md,
+                    "profile": {
+                        "interest": profile.interests,
+                        "grade": profile.grade,
+                        "avg": profile.average,
+                        "subjects": ", ".join((profile.subjects or [])[:6]),
+                    },
                     "programs": ui_programs,
-                    "analysis": analysis,
                     "timeline_events": timeline_events,
                     "projects": projects,
+                    "analysis": analysis,
                 },
             )
-
         except Exception as e:
             logger.error(f"Roadmap generate error: {e}")
             return ServiceResult.failure(str(e))
 
-    # =========================
-    # PROGRAM PAYLOAD
-    # =========================
     def _program_to_payload(self, prog: Program, score: float, bd: Dict[str, Any]) -> Dict[str, Any]:
         def g(obj, attr: str, default=None):
             if isinstance(obj, dict):
@@ -304,7 +261,6 @@ class RoadmapService:
 
         prereq_raw = g(prog, "prerequisites", "") or ""
         admission_raw = g(prog, "admission_average", "") or ""
-
         missing = bd.get("missing_prereqs", []) if isinstance(bd, dict) else []
         missing = [str(x).strip() for x in (missing or []) if str(x).strip()]
 
@@ -317,270 +273,210 @@ class RoadmapService:
             "co_op_available": bool(g(prog, "co_op_available", False) or g(prog, "coop_available", False)),
             "match_percent": match_percent,
             "missing_prereqs": missing,
-            "grade_assessment": bd.get("grade_assessment") if isinstance(bd, dict) else None,
         }
 
-    # =========================
-    # TIMELINE (DATED)
-    # =========================
     def _build_timeline(self, profile: StudentProfile) -> List[Dict[str, Any]]:
-        """
-        Timeline tab = date-based milestones (NOT a checklist).
-        Anchors to Jan 15 “equal consideration” target.
-        """
         today = date.today()
         deadline = _parse_ouac_deadline()
-
-        # milestones (cap each at deadline)
-        def cap(d: date) -> date:
-            return d if d <= deadline else deadline
-
-        milestones = [
-            (today, "Today", [
-                "Confirm your top 6 Grade 12 U/M courses (and your prerequisites).",
-                "Pick 6–10 programs (mix of safe/target/reach).",
-            ]),
-            (cap(today + timedelta(days=7)), "Within 7 days", [
-                "Save links + requirements for each shortlisted program.",
-                "Start a simple tracker: program, prerequisites, admission notes, link.",
-            ]),
-            (cap(today + timedelta(days=21)), "Within 3 weeks", [
-                "Finalize your shortlist (aim 6–10).",
-                "Identify any supplementary pieces (forms, interviews, portfolios) for each school.",
-            ]),
-            (deadline, "OUAC Equal Consideration Target (Jan 15)", [
-                "Submit applications for equal consideration (where applicable).",
-                "Re-check each program page for updated requirements close to submit time.",
-            ]),
-        ]
-
-        # remove duplicate dates (e.g., if close to deadline)
-        seen_dates = set()
-        events: List[Dict[str, Any]] = []
-        for d, title, items in milestones:
-            ds = _iso(d)
-            if ds in seen_dates:
-                continue
-            seen_dates.add(ds)
-            events.append({"date": ds, "title": title, "items": items})
-
-        # add days left meta (optional)
         days_left = max(0, (deadline - today).days)
-        events[-1]["meta"] = {"days_left": days_left}
 
-        return events[:10]
+        def d(n: int) -> str:
+            return (today + timedelta(days=n)).isoformat()
 
-    # =========================
-    # PROJECT CHECKLIST (SUPP / PORTFOLIO)
-    # =========================
+        def before_deadline(n: int) -> str:
+            return (deadline - timedelta(days=n)).isoformat()
+
+        events = []
+        events.append({
+            "date": today.isoformat(),
+            "title": "Start (today)",
+            "items": [
+                "Confirm your top 6 Grade 12 U/M courses + prerequisites",
+                "Create a shortlist tracker (program, link, prereqs, admission notes, supp apps)",
+                "Pick 6–10 programs (safe / target / reach)",
+            ],
+            "meta": {"days_left": days_left},
+        })
+
+        if days_left <= 10:
+            events += [
+                {"date": d(1), "title": "Within 24 hours", "items": [
+                    "Open each program link and verify prerequisites + competitive averages",
+                    "Identify which programs require supplementary applications / interviews",
+                ]},
+                {"date": d(3), "title": "Within 3 days", "items": [
+                    "Finalize your program list (avoid daily switching)",
+                    "Prepare your activities list (role → impact → proof links)",
+                ]},
+                {"date": before_deadline(1), "title": "Day before OUAC (buffer)", "items": [
+                    "Final review: personal info, grades, program choices, payment",
+                    "Save confirmation details (screenshot + tracker notes)",
+                ]},
+            ]
+        else:
+            events += [
+                {"date": d(3), "title": "Within 72 hours", "items": [
+                    "Verify prerequisites for each program and remove mismatches",
+                    "Create a ‘supplementary requirements’ checklist per school",
+                ]},
+                {"date": d(7), "title": "1 week", "items": [
+                    "Lock shortlist (aim 8–12) and categorize safe/target/reach",
+                    "Start 1 portfolio artifact (project write-up / design / GitHub)",
+                ]},
+                {"date": d(14), "title": "2 weeks", "items": [
+                    "Draft 3–5 impact stories (challenge → action → result → lesson)",
+                    "Ask 1–2 mentors/teachers for reference support (if needed)",
+                ]},
+                {"date": before_deadline(7), "title": "1 week before OUAC", "items": [
+                    "Submit early if possible (avoid last-minute technical issues)",
+                    "Confirm supplementary portals + deadlines after submission",
+                ]},
+            ]
+
+        events.append({
+            "date": deadline.isoformat(),
+            "title": "OUAC Equal Consideration (Jan 15)",
+            "items": [
+                "Submit for equal consideration",
+                "Confirm submission + save receipt/confirmation",
+                "Immediately check next steps: portals + supplementary deadlines",
+            ],
+            "meta": {"days_left": days_left},
+        })
+
+        # Deduplicate by date
+        seen = set()
+        clean = []
+        for e in events:
+            if e["date"] in seen:
+                continue
+            seen.add(e["date"])
+            clean.append(e)
+        return clean[:10]
+
     def _build_projects(self, profile: StudentProfile) -> List[Dict[str, Any]]:
-        """
-        Checklist tab = projects + proof-of-interest tasks (unique vs timeline).
-        """
         interest = (profile.interests or "").lower()
 
-        blocks: List[Dict[str, Any]] = []
+        projects = []
 
-        # Engineering / Robotics
-        if any(k in interest for k in ["robot", "mechat", "engineering", "automation"]):
-            blocks.append({
-                "title": "Robotics / Engineering Portfolio Project (2–3 weeks)",
+        if any(k in interest for k in ["robot", "mechat", "engineering", "mechanical", "electrical", "automation"]):
+            projects.append({
+                "title": "Engineering / Robotics Showcase (best differentiator)",
                 "items": [
-                    "Build one small project (Arduino / sensor system / CAD mechanism / simulation).",
-                    "Write a 1-page summary: goal → design → tests → results → what you learned.",
-                    "Add proof: photos/video + diagram + code link (GitHub if possible).",
+                    "Build ONE small system (Arduino + sensor, CAD mechanism, control loop, or simulation)",
+                    "Document tests (before/after, performance numbers, failures + fixes)",
+                    "Create a 60–90s demo video + link it in your tracker",
+                    "Optional: publish to GitHub with a clean README",
                 ],
             })
-            blocks.append({
-                "title": "Supplementary Strength (ongoing)",
+            projects.append({
+                "title": "Club / Competition Impact (ongoing)",
                 "items": [
-                    "Join/lead a club team and own one subsystem (controls, CAD, electronics, testing).",
-                    "Track measurable impact (tests run, iterations, parts designed, bugs fixed).",
-                    "Ask a mentor/teacher for a short reference note about your contributions.",
+                    "Join/lead a team and own one subsystem (CAD, electronics, controls, testing)",
+                    "Track measurable impact (iterations shipped, tests run, parts designed)",
+                    "Ask a mentor/teacher for 2–3 sentence reference note about your role",
                 ],
             })
-
-        # Computer Science
-        elif any(k in interest for k in ["computer", "software", "cs", "ai", "data"]):
-            blocks.append({
-                "title": "Build + Ship a Mini App (2–3 weeks)",
-                "items": [
-                    "Build one app (web tool, bot, data dashboard) related to your interest.",
-                    "Write a README: problem, approach, features, screenshots, next steps.",
-                    "Deploy or publish (GitHub + optional live demo link).",
-                ],
-            })
-
-        # Health/Life sciences
-        elif any(k in interest for k in ["health", "bio", "medical", "life", "neuro"]):
-            blocks.append({
-                "title": "Research / Evidence Project (2–3 weeks)",
-                "items": [
-                    "Pick a topic + write a 1–2 page brief using credible sources.",
-                    "Summarize: what’s known, what’s debated, and your conclusion.",
-                    "Present it (club talk / poster / short video) and keep a linkable copy.",
-                ],
-            })
-
-        # Default
         else:
-            blocks.append({
-                "title": "Interest Portfolio (2–3 weeks)",
+            projects.append({
+                "title": "Portfolio Artifact (1–2 weeks)",
                 "items": [
-                    "Create one tangible artifact (case study, design, mini research brief, app).",
-                    "Document: first version → feedback → improved version.",
-                    "Publish somewhere linkable (Drive/Notion/GitHub).",
+                    "Create ONE tangible artifact: mini research brief, app, case study, or design",
+                    "Document process + reflection (what changed after feedback)",
+                    "Publish it somewhere linkable (Drive/Notion/GitHub)",
                 ],
             })
 
-        # Common “supp pack”
-        blocks.append({
-            "title": "Supplementary Application Pack (high leverage)",
+        projects.append({
+            "title": "Application Strength Pack (high leverage)",
             "items": [
-                "Make a master activities list (role, dates, impact, links).",
-                "Write 3–5 story bullets: challenge → action → result → lesson.",
-                "Prepare a clean folder of evidence: certificates, photos, write-ups, links.",
+                "Create a master activities list (role, dates, impact, proof link)",
+                "Write 5 story bullets (challenge → action → result → lesson)",
+                "Prepare a clean evidence folder (certificates, photos, write-ups, links)",
+                "Draft 1 short ‘why this program’ paragraph template (editable per school)",
             ],
         })
 
-        return blocks[:8]
+        projects.append({
+            "title": "Scholarships & Finance (easy wins)",
+            "items": [
+                "List 5 scholarships you qualify for + deadlines",
+                "Prepare a reusable scholarship paragraph (impact + leadership + growth)",
+                "Estimate cost for top 3 schools (tuition + residence + transport)",
+            ],
+        })
 
-    # =========================
-    # FULL PLAN FORMATTING
-    # =========================
-    def _format_full_plan_ai(
+        return projects[:8]
+
+    def _format_full_plan(
         self,
         profile: StudentProfile,
         ui_programs: List[Dict[str, Any]],
-        analysis: str,
+        analysis_md: str,
         timeline_events: List[Dict[str, Any]],
         projects: List[Dict[str, Any]],
     ) -> str:
-        """
-        LLM formats ONLY (no new facts). If no API, fallback deterministic markdown.
-        """
-        payload = {
-            "profile": {
-                "interest": profile.interests,
-                "grade": profile.grade,
-                "average": profile.average,
-                "subjects": profile.subjects,
-                "location": profile.location,
-            },
-            "programs": ui_programs[:10],
-            "timeline_events": timeline_events,
-            "projects": projects,
-            "analysis": analysis,
-        }
+        subj = ", ".join((profile.subjects or [])[:5]) if profile.subjects else "Not specified"
 
-        if not getattr(self.llm, "has_api", False):
-            return self._format_full_plan_fallback(payload)
-
-        system = (
-            "You are polishing and lightly cleaning Markdown that already follows a fixed template.\n"
-            "RULES:\n"
-            "- Do NOT change the template structure.\n"
-            "- Do NOT convert into numbered outline sections like '1) Profile'.\n"
-            "- Do NOT create tables.\n"
-            "- Keep program blocks as '### 1. Program Name' style.\n"
-            "- You may only:\n"
-            "  (a) fix spacing/line breaks,\n"
-            "  (b) remove duplicate commas/extra spaces,\n"
-            "  (c) make bullets cleaner,\n"
-            "  (d) shorten overly long prereq/admission text WITHOUT adding facts.\n"
-            "- Output ONLY Markdown.\n"
-        )
-
-        payload_json = json.dumps(payload, ensure_ascii=False, default=_json_default)
-
-        prompt = (
-            "Take the following DATA and fill it into the EXACT TEMPLATE below.\n"
-            "Keep headings and separators exactly.\n\n"
-            "TEMPLATE:\n"
-            "## ✨ Your Personalized University Roadmap\n"
-            "\n"
-            "**🎯 Interest:** {interest}\n"
-            "**📊 Grade:** {grade} | **Average:** {average}%\n"
-            "**📚 Subjects:** {subjects}\n"
-            "\n"
-            "---\n"
-            "\n"
-            "## Top Matching Programs\n"
-            "{program_blocks}\n"
-            "\n"
-            "---\n"
-            "\n"
-            "## Personalized Analysis\n"
-            "{analysis}\n"
-            "\n"
-            "---\n"
-            "\n"
-            "## Timeline\n"
-            "{timeline}\n"
-            "\n"
-            "---\n"
-            "\n"
-            "## Checklist Projects\n"
-            "{projects}\n"
-            "\n"
-            "---\n"
-            "**Tip:** Always verify prerequisites/admission details using the program link (requirements can change).\n\n"
-            f"DATA:\n{payload}"
-        )
-
-        out = (self.llm.generate(prompt, system) or "").strip()
-        return out or self._format_full_plan_fallback(payload)
-
-    def _format_full_plan_fallback(self, payload: Dict[str, Any]) -> str:
-        p = payload["profile"]
         lines: List[str] = []
+        lines.append("## ✨ Your Personalized University Roadmap")
+        lines.append("")
+        lines.append(f"**🎯 Interest:** {profile.interests}  ")
+        lines.append(f"**📊 Grade:** {profile.grade} | **Average:** {profile.average}%  ")
+        lines.append(f"**📚 Subjects:** {subj}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## Top Matching Programs")
+        lines.append("")
 
-        lines.append("## ✨ Your Personalized University Roadmap\n")
-        lines.append(f"**🎯 Interest:** {p.get('interest','')}  ")
-        lines.append(f"**📊 Grade:** {p.get('grade','')} | **Average:** {p.get('average','')}%  ")
-        subj = ", ".join((p.get("subjects") or [])[:6]) or "Not specified"
-        lines.append(f"**📚 Subjects:** {subj}\n")
-        lines.append("---\n")
+        for i, p in enumerate(ui_programs[:10], 1):
+            name = p.get("program_name", "")
+            uni = p.get("university_name", "")
+            pct = p.get("match_percent", 0)
+            adm = p.get("admission_average") or "Check website"
+            pre = p.get("prerequisites") or "Check website"
+            miss = p.get("missing_prereqs") or []
+            url = p.get("program_url") or ""
+            coop = "✅ Co-op Available" if p.get("co_op_available") else ""
 
-        lines.append("## Top Matching Programs\n")
-        lines.append("| Program | University | Match | Co-op | Prereqs (db) |")
-        lines.append("|---|---|---:|:---:|---|")
-        for pr in payload["programs"]:
-            coop_mark = "✅" if pr.get("co_op_available") else "—"
-            lines.append(
-                f"| {pr.get('program_name','')} | {pr.get('university_name','')} | "
-                f"{pr.get('match_percent',0)}% | {coop_mark} | {pr.get('prerequisites','')} |"
-            )
-        lines.append("\n---\n")
+            lines.append(f"### {i}. {name}")
+            lines.append(f"**{uni}** | 🌟 Match ({pct}%)  ")
+            lines.append(f"**Admission (db):** {adm}  ")
+            lines.append(f"**Prerequisites (db):** {pre}  ")
+            if miss:
+                lines.append(f"> ⚠️ **Missing:** {', '.join(miss[:8])}")
+            if coop:
+                lines.append(coop)
+            if url:
+                lines.append(f"[View Program Details]({url})")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
-        lines.append("## Timeline\n")
-        for ev in payload["timeline_events"]:
+        lines.append("## Personalized Analysis")
+        lines.append("")
+        lines.append(analysis_md.strip() if analysis_md else "- No analysis returned.")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("## Actionable Next Steps (Timeline)")
+        lines.append("")
+        for ev in timeline_events[:10]:
             lines.append(f"**{ev.get('date','')} — {ev.get('title','')}**")
-            for it in ev.get("items", [])[:10]:
+            for it in (ev.get("items") or [])[:10]:
                 lines.append(f"- {it}")
             lines.append("")
-        lines.append("---\n")
-
-        lines.append("## Checklist Projects\n")
-        for blk in payload["projects"]:
-            lines.append(f"**{blk.get('title','')}**")
-            for it in blk.get("items", [])[:12]:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Portfolio & Supplementary Checklist")
+        lines.append("")
+        for sec in projects[:8]:
+            lines.append(f"**{sec.get('title','')}**")
+            for it in (sec.get("items") or [])[:12]:
                 lines.append(f"- [ ] {it}")
             lines.append("")
-        lines.append("---\n")
+        lines.append("---")
+        lines.append("**Tip:** Always verify prerequisites/admission details using the program link (requirements can change).")
 
-        lines.append("## Personalized Analysis\n")
-        lines.append(payload.get("analysis") or "- No analysis returned.")
         return "\n".join(lines).strip()
-
-    # =========================
-    # FOLLOWUP (unchanged; you can expand later)
-    # =========================
-    def followup(self, question: str, session: Session) -> ServiceResult:
-        try:
-            context = session.last_profile.to_context_string() if session.last_profile else ""
-            prompt = self.prompts.followup_prompt(question, context)
-            response = self.llm.generate(prompt, self.prompts.followup_system_prompt())
-            return ServiceResult.success(message=response) if response else ServiceResult.failure("No response")
-        except Exception as e:
-            return ServiceResult.failure(str(e))
