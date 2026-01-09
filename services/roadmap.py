@@ -198,13 +198,19 @@ class RoadmapService:
 
             # Deterministic phases (no duplication ever)
             phases = self._build_phases(profile, ui_programs)
+            checklist = self._build_checklist(profile, ui_programs, phases)
 
             # Full plan markdown (deterministic sections)
             full_md = self._format_full_plan(profile, ui_programs, analysis, phases)
 
             return ServiceResult.success(
-                message=full_md,
-                data={"programs": ui_programs, "phases": phases, "analysis": analysis},
+            message=full_md,
+            data={
+                "programs": ui_programs,
+                "phases": phases,
+                "checklist": checklist,   # ✅ NEW
+                "analysis": analysis
+                },
             )
 
         except Exception as e:
@@ -290,6 +296,84 @@ class RoadmapService:
 
         return phases[:6]
 
+    def _norm_key(self, s: str) -> str:
+        return " ".join(str(s or "").lower().split())
+
+    def _build_checklist(
+        self,
+        profile: StudentProfile,
+        ui_programs: List[Dict[str, Any]],
+        phases: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Checklist should be different from Timeline:
+        - Timeline = big milestones (phases)
+        - Checklist = concrete, atomic tasks students can check off
+        """
+        # Avoid repeating phase items in checklist
+        phase_items = set()
+        for ph in (phases or []):
+            for it in (ph.get("items") or []):
+                phase_items.add(self._norm_key(it))
+    
+        seen = set()
+        def add(items: List[str], text: str):
+            k = self._norm_key(text)
+            if not k or k in seen or k in phase_items:
+                return
+            seen.add(k)
+            items.append(text)
+    
+        # Gather missing prereqs from programs
+        missing = []
+        for p in (ui_programs or []):
+            for m in (p.get("missing_prereqs") or []):
+                m = str(m).strip()
+                if m and m not in missing:
+                    missing.append(m)
+    
+        sections: List[Dict[str, Any]] = []
+    
+        # Section 1: Prereqs + grades (atomic)
+        prereq_items: List[str] = []
+        if missing:
+            add(prereq_items, f"Book a guidance counsellor meeting to add: {', '.join(missing[:3])}")
+            add(prereq_items, "If timetable is full, enroll in night school / eLearning for missing courses")
+            add(prereq_items, "Calculate your top-6 U/M average (include prerequisites)")
+        else:
+            add(prereq_items, "Confirm your top-6 U/M courses match prerequisites for your top programs")
+            add(prereq_items, "Calculate your top-6 U/M average and set a target for each program tier")
+    
+        add(prereq_items, "Set a weekly grade target for each core course (Math/Science/English)")
+        if prereq_items:
+            sections.append({"title": "Prerequisites & Grades", "items": prereq_items[:8]})
+    
+        # Section 2: Program research (not the same as timeline)
+        research_items: List[str] = []
+        add(research_items, "Open 3 program links and write 1–2 notes each (why it fits / what you like)")
+        add(research_items, "Create a simple tracker: Program | Prereqs | Avg | Co-op | Notes | Link")
+        add(research_items, "Pick 2 ‘reach’, 4 ‘target’, 2 ‘safe’ programs (balance your list)")
+        if research_items:
+            sections.append({"title": "Program Shortlist & Research", "items": research_items[:8]})
+    
+        # Section 3: Profile building (ECs/portfolio)
+        profile_items: List[str] = []
+        add(profile_items, "Start one small project related to your interest (document with photos/screenshots)")
+        add(profile_items, "Join 1 relevant club/team or volunteer role (even 1 hr/week is enough)")
+        add(profile_items, "Write a 5-bullet ‘activity log’ (what you did, impact, skills learned)")
+        if profile_items:
+            sections.append({"title": "Extracurriculars & Portfolio", "items": profile_items[:8]})
+    
+        # Section 4: Applications readiness
+        app_items: List[str] = []
+        add(app_items, "Make a deadlines list (OUAC + supp apps + scholarships)")
+        add(app_items, "Prepare a ‘facts sheet’: grades, awards, activities, hours, leadership roles")
+        add(app_items, "Draft 5 short answers about you (challenge, teamwork, leadership, why program, why you)")
+        if app_items:
+            sections.append({"title": "Application Readiness", "items": app_items[:8]})
+    
+        return sections[:6]
+    
     def _format_full_plan(
         self,
         profile: StudentProfile,

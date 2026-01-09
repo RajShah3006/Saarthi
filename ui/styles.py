@@ -1321,5 +1321,19 @@ def get_css(config: Config) -> str:
       max-width: 100% !important;
     }
 
+    /* Wizard polish */
+    #inputs_view h2, #inputs_view h3 { letter-spacing: 0.2px; }
+    .output-box { padding: 14px 16px; border-radius: 14px; }
+    
+    .secondary-btn { border-radius: 14px; }
+    .primary-btn { border-radius: 14px; font-weight: 600; }
+    
+    .phase { border-radius: 16px; }
+    .prog-card { border-radius: 18px; } /* won’t change Programs layout, just nicer */
+    
+    /* Checklist */
+    .chk { display:block; padding:10px 12px; border-radius:12px; }
+    .chk:hover { background: rgba(255,255,255,0.04); }
+    .chk input { transform: scale(1.05); margin-right: 10px; }
 
     """

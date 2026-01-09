@@ -1,9 +1,8 @@
-# app.py - Two-page flow (Inputs Wizard -> Fullscreen Outputs) + Thin wiring
-
+# app.py
 import gradio as gr
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from config import Config
 from controllers import Controllers
@@ -11,9 +10,9 @@ from ui.layout import create_ui_layout
 from ui.styles import get_css
 
 from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
+from services.submissions_store import SubmissionStore
+from services.email_builder import build_email_from_submission
 
-
-# Logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -21,51 +20,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger("saarthi")
 
+store = SubmissionStore()
 
-def create_app():
-    logger.info("=" * 50)
-    logger.info(" Initializing Saarthi AI")
-    logger.info("=" * 50)
 
+def create_app() -> gr.Blocks:
     config = Config()
     controllers = Controllers(config)
-
-    logger.info(f" Data directory: {config.DATA_DIR}")
-    logger.info(f" AI Service: {'Enabled' if config.GEMINI_API_KEY else 'Demo Mode'}")
-    logger.info(f" Programs loaded: {len(controllers.program_search.programs)}")
-
     css = get_css(config)
-    theme = gr.themes.Soft(
-        primary_hue="blue",
-        secondary_hue="purple",
-        neutral_hue="slate",
-    )
 
-    # Gradio 6+: pass css/theme to launch() (not Blocks) to avoid warning
-    with gr.Blocks(title="Saarthi AI - University Guidance") as app:
+    with gr.Blocks(
+        title="Saarthi AI - University Guidance",
+        css=css,
+        theme=gr.themes.Soft(primary_hue="blue", secondary_hue="purple", neutral_hue="slate"),
+    ) as app:
         components = create_ui_layout(config)
-        wire_events(components, controllers)
-        logger.info("✅ App initialized successfully")
+        wire_events(components, controllers, config)
 
-    launch_kwargs = dict(css=css, theme=theme)
-    return app, launch_kwargs
+    return app
 
 
-def wire_events(components: dict, controllers: Controllers):
+def wire_events(components: dict, controllers: Controllers, config: Config):
     session_state = components["session_state"]
+    name_state = components["name_state"]
+    view_state = components["view_state"]
+
     login = components["login"]
     student = components["student"]
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences):
+    # ---------------- Helpers ----------------
+    def safe_plan_dict(plan: Any) -> Dict[str, Any]:
+        # Expect dict: {"md":..., "profile":..., "programs":..., "phases":...}
+        if isinstance(plan, dict):
+            return plan
+        return {"md": plan or "", "profile": {}, "programs": [], "phases": []}
+
+    def build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email):
         subjects_str = ", ".join(subjects or []) or "—"
         tags_str = ", ".join(tags or []) or "—"
         details = (details or "").strip() or "—"
         extracurriculars = (extracurriculars or "").strip() or "—"
         location = (location or "").strip() or "—"
         preferences = (preferences or "").strip() or "—"
+        email_line = f"Yes ({email.strip()})" if wants_email and (email or "").strip() else ("Yes (missing email!)" if wants_email else "No")
+
         return (
             f"**Grade:** {grade}  \n"
             f"**Average:** {average}%  \n"
@@ -74,42 +71,52 @@ def wire_events(components: dict, controllers: Controllers):
             f"**Interests:** {tags_str}  \n"
             f"**Details:** {details}  \n\n"
             f"**Extracurriculars:** {extracurriculars}  \n"
-            f"**Preferences:** {preferences}"
+            f"**Preferences:** {preferences}  \n\n"
+            f"**Email response:** {email_line}"
         )
 
-    def safe_plan_dict(plan_raw: Any) -> Dict[str, Any]:
-        """
-        Normalize controller output into:
-        { "md": str, "profile": dict, "programs": list, "phases": list }
+    def parse_resume_code(code: str) -> Tuple[int, str]:
+        # expected "id:token"
+        code = (code or "").strip()
+        if ":" not in code:
+            return (0, "")
+        a, b = code.split(":", 1)
+        try:
+            return (int(a.strip()), b.strip())
+        except Exception:
+            return (0, "")
 
-        Supports:
-        - dict (preferred)
-        - markdown string (legacy)
-        - tuple/list (md, programs, phases, profile) from earlier refactors
-        """
-        if isinstance(plan_raw, dict):
-            return {
-                "md": plan_raw.get("md", "") or "",
-                "profile": plan_raw.get("profile", {}) or {},
-                "programs": plan_raw.get("programs", []) or [],
-                "phases": plan_raw.get("phases", []) or [],
-            }
+    # ---------------- Login ----------------
+    def on_start(name: str):
+        # controllers returns: (hide login, show student, welcome_md, session_id)
+        hide_login, show_student, welcome_md, session_id = controllers.handle_start_session(name)
+        return (
+            hide_login,
+            show_student,
+            welcome_md,
+            session_id,
+            (name or "Student"),
+            gr.update(visible=True),   # inputs_view
+            gr.update(visible=False),  # outputs_view
+            "inputs",
+        )
 
-        if isinstance(plan_raw, (tuple, list)) and len(plan_raw) == 4:
-            md, programs, phases, profile = plan_raw
-            return {
-                "md": md or "",
-                "profile": profile or {},
-                "programs": programs or [],
-                "phases": phases or [],
-            }
+    login["start_btn"].click(
+        fn=on_start,
+        inputs=[login["name_input"]],
+        outputs=[
+            login["section"],
+            student["section"],
+            student["output_display"],
+            session_state,
+            name_state,
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+        ],
+    )
 
-        # fallback: treat as markdown string
-        return {"md": plan_raw or "", "profile": {}, "programs": [], "phases": []}
-
-    # ------------------------------------------------------------------
-    # Wizard step navigation
-    # ------------------------------------------------------------------
+    # ---------------- Wizard nav ----------------
     def set_step(step: int):
         step = max(1, min(4, int(step)))
         return (
@@ -119,22 +126,19 @@ def wire_events(components: dict, controllers: Controllers):
             gr.update(visible=(step == 2)),
             gr.update(visible=(step == 3)),
             gr.update(visible=(step == 4)),
-            gr.update(visible=(step > 1)),          # back visible
-            gr.update(visible=(step < 4)),          # next visible
-            gr.update(interactive=(step == 4)),     # generate enabled only on step 4
+            gr.update(visible=(step > 1)),
+            gr.update(visible=(step < 4)),
+            gr.update(interactive=(step == 4)),
         )
 
-    def on_next(step, subjects, tags, details, extracurriculars, average, grade, location, preferences):
+    def on_next(step, subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email):
         new_step = min(4, int(step) + 1)
         base = set_step(new_step)
-
         review = gr.update()
         if new_step == 4:
             review = gr.update(
-                value=build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences)
+                value=build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email)
             )
-
-        # base returns 9 outputs; review_box is 10th
         return (*base, review)
 
     def on_back(step):
@@ -152,6 +156,8 @@ def wire_events(components: dict, controllers: Controllers):
             student["grade_input"],
             student["location_input"],
             student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
         ],
         outputs=[
             student["wizard_step"],
@@ -175,68 +181,69 @@ def wire_events(components: dict, controllers: Controllers):
         ],
     )
 
-    # ------------------------------------------------------------------
-    # Preset buttons (optional)
-    # ------------------------------------------------------------------
-    if "preset_eng" in student:
-        student["preset_eng"].click(fn=lambda: ["Engineering"], inputs=[], outputs=[student["interest_tags_input"]])
-    if "preset_cs" in student:
-        student["preset_cs"].click(fn=lambda: ["Computer Science"], inputs=[], outputs=[student["interest_tags_input"]])
-    if "preset_bus" in student:
-        student["preset_bus"].click(fn=lambda: ["Business/Commerce"], inputs=[], outputs=[student["interest_tags_input"]])
-    if "preset_hs" in student:
-        student["preset_hs"].click(fn=lambda: ["Health Sciences"], inputs=[], outputs=[student["interest_tags_input"]])
+    # ---------------- Resume ----------------
+    def on_resume(code: str):
+        sid, token = parse_resume_code(code)
+        if not sid or not token:
+            return gr.update(value="❌ Invalid code. Use format: `id:token`"), gr.update()
 
-    # ------------------------------------------------------------------
-    # Login -> show student section and reset to INPUTS view
-    # ------------------------------------------------------------------
-    def start_and_reset(name: str):
-        login_update, student_update, welcome_md, sid = controllers.handle_start_session(name)
+        sub = store.get_by_resume_code(sid, token)
+        if not sub:
+            return gr.update(value="❌ Not found. Check the code again."), gr.update()
 
-        # force: show inputs page, hide outputs page, reset wizard to step 1
-        step = 1
-        step_updates = set_step(step)
+        sub_u = store.unpack(sub)
+        # Switch to outputs view and render
+        plan = {
+            "md": sub_u.get("roadmap_md", ""),
+            "profile": {
+                "interest": sub_u.get("interests", ""),
+                "grade": sub_u.get("grade", ""),
+                "avg": sub_u.get("average", ""),
+                "subjects": ", ".join(sub_u.get("subjects", [])[:5]),
+            },
+            "programs": sub_u.get("ui_programs", []),
+            "phases": sub_u.get("ui_phases", []),
+        }
+
+        timeline_html = render_timeline(plan["profile"], plan["phases"])
+        programs_html = render_program_cards(plan["programs"])
+        checklist_html = render_checklist(plan["phases"])
+        full_md = plan["md"] or ""
 
         return (
-            login_update,
-            student_update,
-            welcome_md,
-            sid,
-            gr.update(visible=True),     # inputs_view
-            gr.update(visible=False),    # outputs_view
-            *step_updates,               # wizard_step..generate_btn updates
-            gr.update(value="Fill earlier steps to preview here."),  # review_box
+            gr.update(value="✅ Loaded saved roadmap."),
+            gr.update(value=f"**Resume code:** `{sid}:{token}`"),
+            gr.update(visible=False),
+            gr.update(visible=True),
+            "outputs",
+            timeline_html,
+            programs_html,
+            checklist_html,
+            full_md,
         )
 
-    login["start_btn"].click(
-        fn=start_and_reset,
-        inputs=[login["name_input"]],
+    student["resume_btn"].click(
+        fn=on_resume,
+        inputs=[student["resume_code_input"]],
         outputs=[
-            login["section"],
-            student["section"],
-            student["output_display"],   # welcome text goes into Full Plan (hidden until outputs view, but ok)
-            session_state,
-
+            student["resume_status"],
+            student["submission_code_out"],
             student["inputs_view"],
             student["outputs_view"],
-
-            student["wizard_step"],
-            student["step_label"],
-            student["step1"], student["step2"], student["step3"], student["step4"],
-            student["back_btn"], student["next_btn"],
-            student["generate_btn"],
-
-            student["review_box"],
+            view_state,
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
         ],
     )
 
-    # ------------------------------------------------------------------
-    # Generate Roadmap -> render + switch to OUTPUTS fullscreen
-    # ------------------------------------------------------------------
-    def generate_and_render(subjects, interest_tags, interest_details, extracurriculars, average, grade, location, preferences, session_id):
+    # ---------------- Generate (store + render + switch view) ----------------
+    def generate_and_show(subjects, interest_tags, interest_details, extracurriculars, average, grade,
+                          location, preferences, wants_email, student_email, session_id, student_name):
+
         tags = [t.strip() for t in (interest_tags or []) if t and t.strip()]
         details = (interest_details or "").strip()
-
         if tags and details:
             interests = f"{', '.join(tags)}; Details: {details}"
         elif tags:
@@ -244,35 +251,63 @@ def wire_events(components: dict, controllers: Controllers):
         else:
             interests = details
 
-        plan_raw = controllers.handle_generate_roadmap(
-            subjects,
-            interests,
-            extracurriculars,
-            average,
-            grade,
-            location,
-            preferences,
-            session_id,
-        )
+        # validate email if wants_email
+        if wants_email and not (student_email or "").strip():
+            return (
+                gr.update(value="❌ Please enter an email address (Step 4)."),
+                gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update(),
+            )
 
+        # 1) create submission row first
+        created = store.create_submission({
+            "student_name": student_name or "Student",
+            "student_email": (student_email or "").strip(),
+            "wants_email": bool(wants_email),
+            "grade": grade,
+            "average": float(average),
+            "subjects": subjects or [],
+            "interests": interests,
+            "extracurriculars": extracurriculars or "",
+            "location": location or "",
+            "preferences": preferences or "",
+        })
+
+        # 2) generate plan from your existing controller/service
+        plan_raw = controllers.handle_generate_roadmap(
+            subjects, interests, extracurriculars, average, grade, location, preferences, session_id
+        )
         plan = safe_plan_dict(plan_raw)
 
+        # Must have phases/programs to render; if controller still returns md-only, it will render empty blocks.
         timeline_html = render_timeline(plan.get("profile", {}) or {}, plan.get("phases", []) or [])
         programs_html = render_program_cards(plan.get("programs", []) or [])
-        checklist_html = render_checklist(plan.get("phases", []) or [])
+        checklist_html = render_checklist(plan.get("checklist", []) or [])
         full_md = plan.get("md", "") or ""
 
+        # 3) store generated outputs
+        store.save_generated_plan(created["id"], full_md, plan.get("programs", []) or [], plan.get("phases", []) or [])
+
+        resume_code = f"{created['id']}:{created['resume_token']}"
+        note = f"**Resume code:** `{resume_code}`"
+        if wants_email:
+            note += "\n\n✅ Email requested. A team member will review and send it."
+
+        # 4) switch to outputs-only view
         return (
+            gr.update(value=""),                 # resume_status clear
+            gr.update(value=note),               # submission_code_out
+            gr.update(visible=False),            # inputs_view
+            gr.update(visible=True),             # outputs_view
+            "outputs",
             timeline_html,
             programs_html,
             checklist_html,
             full_md,
-            gr.update(visible=False),  # inputs_view OFF
-            gr.update(visible=True),   # outputs_view ON
         )
 
     student["generate_btn"].click(
-        fn=generate_and_render,
+        fn=generate_and_show,
         inputs=[
             student["subjects_input"],
             student["interest_tags_input"],
@@ -282,44 +317,37 @@ def wire_events(components: dict, controllers: Controllers):
             student["grade_input"],
             student["location_input"],
             student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
             session_state,
+            name_state,
         ],
         outputs=[
+            student["resume_status"],
+            student["submission_code_out"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
             student["timeline_display"],
             student["programs_display"],
             student["checklist_display"],
             student["output_display"],
-            student["inputs_view"],
-            student["outputs_view"],
         ],
     )
 
-    # ------------------------------------------------------------------
-    # "Edit Inputs" button -> switch back to INPUTS fullscreen
-    # ------------------------------------------------------------------
-    def show_inputs():
-        return gr.update(visible=True), gr.update(visible=False)
+    # Back to inputs
+    def go_edit_inputs():
+        return gr.update(visible=True), gr.update(visible=False), "inputs"
 
     student["edit_inputs_btn"].click(
-        fn=show_inputs,
+        fn=go_edit_inputs,
         inputs=[],
-        outputs=[student["inputs_view"], student["outputs_view"]],
+        outputs=[student["inputs_view"], student["outputs_view"], view_state],
     )
 
-    # ------------------------------------------------------------------
-    # Clear form (optional: also bring them back to step 1)
-    # ------------------------------------------------------------------
-    def clear_and_reset():
-        cleared = controllers.handle_clear_form()
-        step_updates = set_step(1)
-        return (
-            *cleared,
-            *step_updates,
-            gr.update(value="Fill earlier steps to preview here."),
-        )
-
+    # Clear form (doesn't change view)
     student["clear_btn"].click(
-        fn=clear_and_reset,
+        fn=controllers.handle_clear_form,
         inputs=[],
         outputs=[
             student["subjects_input"],
@@ -330,34 +358,16 @@ def wire_events(components: dict, controllers: Controllers):
             student["grade_input"],
             student["location_input"],
             student["preferences_input"],
-
-            student["wizard_step"],
-            student["step_label"],
-            student["step1"], student["step2"], student["step3"], student["step4"],
-            student["back_btn"], student["next_btn"],
-            student["generate_btn"],
-
-            student["review_box"],
         ],
     )
 
-    # ------------------------------------------------------------------
-    # Follow-up -> update outputs (keep outputs view visible)
-    # Controller signature assumed: (question, current_md, session_id)
-    # ------------------------------------------------------------------
-    def followup_and_render(question, current_md, session_id):
-        plan_raw = controllers.handle_followup(question, current_md, session_id)
-        plan = safe_plan_dict(plan_raw)
-
-        timeline_html = render_timeline(plan.get("profile", {}) or {}, plan.get("phases", []) or [])
-        programs_html = render_program_cards(plan.get("programs", []) or [])
-        checklist_html = render_checklist(plan.get("phases", []) or [])
-        full_md = plan.get("md", "") or ""
-
-        return "", timeline_html, programs_html, checklist_html, full_md
+    # ---------------- Follow-up (keeps outputs; only updates full_md) ----------------
+    def followup(question, current_md, session_id):
+        cleared_q, new_md = controllers.handle_followup(question, current_md, session_id)
+        return cleared_q, gr.update(), gr.update(), gr.update(), new_md
 
     student["send_btn"].click(
-        fn=followup_and_render,
+        fn=followup,
         inputs=[student["followup_input"], student["output_display"], session_state],
         outputs=[
             student["followup_input"],
@@ -369,7 +379,7 @@ def wire_events(components: dict, controllers: Controllers):
     )
 
     student["followup_input"].submit(
-        fn=followup_and_render,
+        fn=followup,
         inputs=[student["followup_input"], student["output_display"], session_state],
         outputs=[
             student["followup_input"],
@@ -380,13 +390,96 @@ def wire_events(components: dict, controllers: Controllers):
         ],
     )
 
+    # =========================
+    # ADMIN (approval workflow)
+    # =========================
+    def admin_unlock(pin: str):
+        expected = getattr(config, "ADMIN_PIN", "") or ""
+        if not expected:
+            return gr.update(value="⚠️ ADMIN_PIN not set in config/env."), gr.update(visible=False)
+        if (pin or "").strip() != expected:
+            return gr.update(value="❌ Wrong PIN."), gr.update(visible=False)
+        return gr.update(value="✅ Admin unlocked."), gr.update(visible=True)
+
+    student["admin_login_btn"].click(
+        fn=admin_unlock,
+        inputs=[student["admin_pin"]],
+        outputs=[student["admin_status"], student["admin_section"]],
+    )
+
+    def refresh_queue():
+        rows = store.list_queue(limit=200)
+        table = [[r["id"], r["created_at"], r["student_name"], r["student_email"], r["status"]] for r in rows]
+        return table
+
+    student["refresh_queue_btn"].click(
+        fn=refresh_queue,
+        inputs=[],
+        outputs=[student["queue_table"]],
+    )
+
+    def admin_load(submission_id: float):
+        if submission_id is None:
+            return "", "", "", "", ""
+        sub = store.admin_get(int(submission_id))
+        if not sub:
+            return "❌ Not found.", "", "", "", ""
+        sub_u = store.unpack(sub)
+
+        plan_md = sub_u.get("roadmap_md", "") or ""
+        subj = sub_u.get("email_subject", "") or ""
+        body = sub_u.get("email_body_text", "") or ""
+
+        # helper: mailto draft (no Gmail API needed yet)
+        email = (sub_u.get("student_email") or "").strip()
+        mailto = ""
+        if email:
+            import urllib.parse
+            mailto = f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>Open email draft in mail client</a>"
+        return plan_md, subj, body, (mailto or ""), ""
+
+    student["load_btn"].click(
+        fn=admin_load,
+        inputs=[student["review_id"]],
+        outputs=[student["admin_plan_md"], student["email_subject"], student["email_body"], student["gmail_helper"], student["admin_status"]],
+    )
+
+    def admin_autofill(submission_id: float):
+        sub = store.admin_get(int(submission_id))
+        if not sub:
+            return "", "", "❌ Not found."
+        sub_u = store.unpack(sub)
+        email = build_email_from_submission(sub_u)
+        store.admin_save_email(int(submission_id), email["subject"], email["body_text"])
+        return email["subject"], email["body_text"], "✅ Auto-filled + saved."
+
+    student["autofill_email_btn"].click(
+        fn=admin_autofill,
+        inputs=[student["review_id"]],
+        outputs=[student["email_subject"], student["email_body"], student["admin_status"]],
+    )
+
+    def admin_save(submission_id: float, subject: str, body: str):
+        store.admin_save_email(int(submission_id), subject or "", body or "")
+        return "✅ Draft saved."
+
+    student["save_email_btn"].click(
+        fn=admin_save,
+        inputs=[student["review_id"], student["email_subject"], student["email_body"]],
+        outputs=[student["admin_status"]],
+    )
+
+    def admin_mark_sent(submission_id: float):
+        store.admin_mark_sent(int(submission_id))
+        return "✅ Marked as SENT."
+
+    student["mark_sent_btn"].click(
+        fn=admin_mark_sent,
+        inputs=[student["review_id"]],
+        outputs=[student["admin_status"]],
+    )
+
 
 if __name__ == "__main__":
-    app, launch_kwargs = create_app()
-    app.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        show_error=True,
-        **launch_kwargs,
-    )
+    app = create_app()
+    app.launch(server_name="0.0.0.0", server_port=7860, share=False, show_error=True)

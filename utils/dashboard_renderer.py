@@ -73,23 +73,25 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     return f"<div class='prog-grid'>{''.join(cards)}</div>"
 
 
-def render_checklist(phases: List[Dict[str, Any]]) -> str:
-    if not phases:
-        return "<div class='card-empty'>No checklist yet. Generate a roadmap to see tasks.</div>"
+def render_checklist(checklist_sections):
+    if not checklist_sections:
+        return "<div class='card-empty'>No checklist yet.</div>"
 
     blocks = []
-    for ph in phases[:6]:
-        title = ph.get("title", "")
-        items = ph.get("items", []) or []
+    for sec in checklist_sections[:6]:
+        title = sec.get("title", "Checklist")
+        items = sec.get("items", []) or []
         checks = "".join(
-            [f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>" for it in items[:10]]
+            f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>"
+            for it in items[:10]
         )
         blocks.append(f"""
-        <div class="phase">
-          <div class="phase-title">{_esc(title)}</div>
-          <div class="chk-wrap">{checks}</div>
-        </div>
+          <div class="phase">
+            <div class="phase-title">{_esc(title)}</div>
+            <div class="chk-wrap">{checks}</div>
+          </div>
         """)
+
     return f"<div class='phase-wrap'>{''.join(blocks)}</div>"
 
 
