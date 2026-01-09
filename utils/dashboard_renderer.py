@@ -3,10 +3,11 @@ import html
 import re
 from typing import Dict, List, Any
 
+IDX_RE = re.compile(r"^\s*(\d+)\.")  # used by Compare selection like "1. [93%] ..."
+
 def _esc(s: str) -> str:
     return html.escape(str(s or ""), quote=True)
 
-IDX_RE = re.compile(r"^\s*(\d+)\.")
 
 def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     if not programs:
@@ -41,7 +42,8 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
         coop_html = "<span class='pill'>✅ Co-op</span>" if coop else ""
         link_html = (
             f"<a class='link-btn' href='{_esc(url)}' target='_blank' rel='noopener'>View Program</a>"
-            if url else ""
+            if url
+            else ""
         )
 
         cards.append(f"""
@@ -66,7 +68,11 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
 
     return f"<div class='prog-grid'>{''.join(cards)}</div>"
 
+
 def render_checklist(sections: List[Dict[str, Any]]) -> str:
+    """
+    sections: [{ "title": "...", "items": ["...", ...] }, ...]
+    """
     if not sections:
         return "<div class='card-empty'>No checklist yet.</div>"
 
@@ -81,6 +87,7 @@ def render_checklist(sections: List[Dict[str, Any]]) -> str:
             f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>"
             for it in items[:12]
         )
+
         blocks.append(f"""
           <div class="phase">
             <div class="phase-title">{_esc(title)}</div>
@@ -93,14 +100,17 @@ def render_checklist(sections: List[Dict[str, Any]]) -> str:
 
     return f"<div class='phase-wrap'>{''.join(blocks)}</div>"
 
+
 def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any]]) -> str:
-    # Profile header chips
+    """
+    timeline_events: [{date:'YYYY-MM-DD', title:'...', items:[...], meta:{days_left:int}}, ...]
+    """
     chips = []
     if profile.get("interest"):
         chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
     if profile.get("grade"):
         g = profile["grade"]
-        if profile.get("avg") is not None and str(profile.get("avg")).strip() != "":
+        if profile.get("avg") is not None:
             g = f"{g} • {profile['avg']}%"
         chips.append(f"<span class='chip'>📊 {_esc(g)}</span>")
     if profile.get("subjects"):
@@ -120,16 +130,24 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
 
     items_html = []
     for ev in timeline_events[:10]:
-        title = (ev.get("title") or "").strip()
-        d = (ev.get("date") or "").strip()
+        d = ev.get("date", "")
+        title = ev.get("title", "")
         items = ev.get("items", []) or []
         li = "".join([f"<li>{_esc(x)}</li>" for x in items[:8]])
+
+        meta = ev.get("meta") or {}
+        days_left = meta.get("days_left")
+        days_badge = f"<span class='pill pill-soft'>⏳ {int(days_left)} days left</span>" if isinstance(days_left, (int, float)) else ""
 
         items_html.append(f"""
         <div class="t-item">
           <div class="t-dot"></div>
           <div class="t-card">
-            <div class="t-title">{_esc(d)} — {_esc(title)}</div>
+            <div class="t-title">
+              <span class="t-date">{_esc(d)}</span>
+              <span class="t-name">{_esc(title)}</span>
+              {days_badge}
+            </div>
             <ul class="t-list">{li}</ul>
           </div>
         </div>
@@ -138,17 +156,19 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
     return f"""
     <div class="timeline-wrap">
       {header}
-      <div class="timeline-head">Application Timeline (OUAC anchored)</div>
+      <div class="timeline-head">Timeline to OUAC</div>
       <div class="timeline">{''.join(items_html)}</div>
     </div>
     """
+
 
 def render_compare(selected: List[str], programs: List[Dict[str, Any]]) -> str:
     if not selected:
         return "<div class='card-empty'>Pick programs to compare.</div>"
 
     programs = programs or []
-    picks = []
+    picks: List[Dict[str, Any]] = []
+
     for s in (selected or [])[:4]:
         m = IDX_RE.match(s or "")
         if not m:
@@ -167,7 +187,7 @@ def render_compare(selected: List[str], programs: List[Dict[str, Any]]) -> str:
           <td>{_esc(p.get('program_name',''))}</td>
           <td>{_esc(p.get('university_name',''))}</td>
           <td>{_esc(p.get('match_percent',0))}%</td>
-          <td>{'✅' if p.get('co_op_available') else '—'}</td>
+          <td>{"✅" if p.get("co_op_available") else "—"}</td>
           <td>{_esc(p.get('prerequisites',''))}</td>
           <td>{_esc(p.get('admission_average',''))}</td>
         </tr>
@@ -177,7 +197,14 @@ def render_compare(selected: List[str], programs: List[Dict[str, Any]]) -> str:
     <div class="table-wrap">
       <table class="cmp">
         <thead>
-          <tr><th>Program</th><th>University</th><th>Match</th><th>Co-op</th><th>Prereqs</th><th>Admission</th></tr>
+          <tr>
+            <th>Program</th>
+            <th>University</th>
+            <th>Match</th>
+            <th>Co-op</th>
+            <th>Prereqs</th>
+            <th>Admission</th>
+          </tr>
         </thead>
         <tbody>{''.join(rows)}</tbody>
       </table>

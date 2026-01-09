@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 DEFAULT_DB_PATH = "data/submissions.db"
 
+
 class SubmissionStore:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
@@ -24,7 +25,7 @@ class SubmissionStore:
 
     @staticmethod
     def _json_default(o):
-        # numpy scalars/arrays → python
+        # numpy scalars/arrays
         try:
             import numpy as np
             if isinstance(o, np.generic):
@@ -45,7 +46,7 @@ class SubmissionStore:
 
         return str(o)
 
-    def _dumps(self, obj) -> str:
+    def _dumps(self, obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False, default=self._json_default)
 
     @staticmethod
@@ -57,13 +58,9 @@ class SubmissionStore:
         except Exception:
             return default
 
-    def _ensure_columns(self, conn: sqlite3.Connection, table: str, cols: Dict[str, str]) -> None:
-        existing = set()
-        for r in conn.execute(f"PRAGMA table_info({table});").fetchall():
-            existing.add(r["name"])
-        for name, ddl in cols.items():
-            if name not in existing:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl};")
+    def _table_columns(self, conn: sqlite3.Connection, table: str) -> List[str]:
+        rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
+        return [r["name"] for r in rows]
 
     def _init_db(self) -> None:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -73,7 +70,6 @@ class SubmissionStore:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-
                 student_name TEXT NOT NULL,
                 student_email TEXT,
                 wants_email INTEGER NOT NULL DEFAULT 0,
@@ -100,11 +96,14 @@ class SubmissionStore:
             );
             """)
 
-            # auto-migrate older dbs safely
-            self._ensure_columns(conn, "submissions", {
-                "ui_timeline_json": "TEXT",
-                "ui_projects_json": "TEXT",
-            })
+            # Auto-migrate older DBs (add missing columns)
+            cols = set(self._table_columns(conn, "submissions"))
+            def add_col(name: str, ddl: str):
+                if name not in cols:
+                    conn.execute(ddl)
+
+            add_col("ui_timeline_json", "ALTER TABLE submissions ADD COLUMN ui_timeline_json TEXT;")
+            add_col("ui_projects_json", "ALTER TABLE submissions ADD COLUMN ui_projects_json TEXT;")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON submissions(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_token ON submissions(resume_token);")
@@ -130,16 +129,19 @@ class SubmissionStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 now, now,
-                payload["student_name"],
+                payload.get("student_name") or "Student",
                 payload.get("student_email") or "",
                 1 if payload.get("wants_email") else 0,
-                payload["grade"],
-                float(payload["average"]),
+
+                payload.get("grade") or "Grade 12",
+                float(payload.get("average") or 0),
                 self._dumps(subjects),
-                payload["interests"],
+                payload.get("interests") or "",
+
                 payload.get("extracurriculars") or "",
                 payload.get("location") or "",
                 payload.get("preferences") or "",
+
                 "NEW",
                 resume_token,
             ))
@@ -196,9 +198,9 @@ class SubmissionStore:
     def list_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
-                SELECT id, created_at, student_name, student_email, status
+                SELECT id, created_at, student_name, student_email, wants_email, status
                 FROM submissions
-                WHERE wants_email=1 AND status IN ('NEW','GENERATED','IN_REVIEW')
+                WHERE wants_email=1 AND status IN ('GENERATED','IN_REVIEW')
                 ORDER BY created_at DESC
                 LIMIT ?
             """, (int(limit),)).fetchall()
