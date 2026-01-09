@@ -1,9 +1,7 @@
 # utils/dashboard_renderer.py
 import html
-import re
 from typing import Dict, List, Any
 
-IDX_RE = re.compile(r"^\s*(\d+)\.")  # used by Compare selection like "1. [93%] ..."
 
 def _esc(s: str) -> str:
     return html.escape(str(s or ""), quote=True)
@@ -17,7 +15,7 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
     for p in programs[:12]:
         name = p.get("program_name", "")
         uni = p.get("university_name", "")
-        pct = int(p.get("match_percent") or 0)
+        pct = p.get("match_percent") or 0
         coop = bool(p.get("co_op_available", False))
         adm = p.get("admission_average", "") or "Check website"
         pre = p.get("prerequisites", "") or "Check website"
@@ -70,24 +68,17 @@ def render_program_cards(programs: List[Dict[str, Any]]) -> str:
 
 
 def render_checklist(sections: List[Dict[str, Any]]) -> str:
-    """
-    sections: [{ "title": "...", "items": ["...", ...] }, ...]
-    """
     if not sections:
         return "<div class='card-empty'>No checklist yet.</div>"
 
     blocks = []
     for sec in sections[:8]:
         title = sec.get("title", "Checklist")
-        items = [x for x in (sec.get("items", []) or []) if str(x).strip()]
-        if not items:
-            continue
-
+        items = sec.get("items", []) or []
         checks = "".join(
             f"<label class='chk'><input type='checkbox'/> <span>{_esc(it)}</span></label>"
             for it in items[:12]
         )
-
         blocks.append(f"""
           <div class="phase">
             <div class="phase-title">{_esc(title)}</div>
@@ -95,16 +86,10 @@ def render_checklist(sections: List[Dict[str, Any]]) -> str:
           </div>
         """)
 
-    if not blocks:
-        return "<div class='card-empty'>No checklist yet.</div>"
-
     return f"<div class='phase-wrap'>{''.join(blocks)}</div>"
 
 
 def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any]]) -> str:
-    """
-    timeline_events: [{date:'YYYY-MM-DD', title:'...', items:[...], meta:{days_left:int}}, ...]
-    """
     chips = []
     if profile.get("interest"):
         chips.append(f"<span class='chip'>🎯 {_esc(profile['interest'])}</span>")
@@ -130,24 +115,15 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
 
     items_html = []
     for ev in timeline_events[:10]:
-        d = ev.get("date", "")
+        date_str = ev.get("date", "")
         title = ev.get("title", "")
         items = ev.get("items", []) or []
         li = "".join([f"<li>{_esc(x)}</li>" for x in items[:8]])
-
-        meta = ev.get("meta") or {}
-        days_left = meta.get("days_left")
-        days_badge = f"<span class='pill pill-soft'>⏳ {int(days_left)} days left</span>" if isinstance(days_left, (int, float)) else ""
-
         items_html.append(f"""
         <div class="t-item">
           <div class="t-dot"></div>
           <div class="t-card">
-            <div class="t-title">
-              <span class="t-date">{_esc(d)}</span>
-              <span class="t-name">{_esc(title)}</span>
-              {days_badge}
-            </div>
+            <div class="t-title">{_esc(date_str)} — {_esc(title)}</div>
             <ul class="t-list">{li}</ul>
           </div>
         </div>
@@ -158,55 +134,5 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
       {header}
       <div class="timeline-head">Timeline to OUAC</div>
       <div class="timeline">{''.join(items_html)}</div>
-    </div>
-    """
-
-
-def render_compare(selected: List[str], programs: List[Dict[str, Any]]) -> str:
-    if not selected:
-        return "<div class='card-empty'>Pick programs to compare.</div>"
-
-    programs = programs or []
-    picks: List[Dict[str, Any]] = []
-
-    for s in (selected or [])[:4]:
-        m = IDX_RE.match(s or "")
-        if not m:
-            continue
-        idx = int(m.group(1)) - 1
-        if 0 <= idx < len(programs):
-            picks.append(programs[idx])
-
-    if not picks:
-        return "<div class='card-empty'>Pick programs to compare.</div>"
-
-    rows = []
-    for p in picks:
-        rows.append(f"""
-        <tr>
-          <td>{_esc(p.get('program_name',''))}</td>
-          <td>{_esc(p.get('university_name',''))}</td>
-          <td>{_esc(p.get('match_percent',0))}%</td>
-          <td>{"✅" if p.get("co_op_available") else "—"}</td>
-          <td>{_esc(p.get('prerequisites',''))}</td>
-          <td>{_esc(p.get('admission_average',''))}</td>
-        </tr>
-        """)
-
-    return f"""
-    <div class="table-wrap">
-      <table class="cmp">
-        <thead>
-          <tr>
-            <th>Program</th>
-            <th>University</th>
-            <th>Match</th>
-            <th>Co-op</th>
-            <th>Prereqs</th>
-            <th>Admission</th>
-          </tr>
-        </thead>
-        <tbody>{''.join(rows)}</tbody>
-      </table>
     </div>
     """
