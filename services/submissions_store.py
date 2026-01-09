@@ -4,9 +4,32 @@ import sqlite3
 import json
 import secrets
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_DB_PATH = "data/submissions.db"
+
+
+def _json_default(o: Any):
+    """json.dumps default that handles numpy + other odd types safely."""
+    try:
+        import numpy as np
+        if isinstance(o, np.generic):
+            return o.item()
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+    except Exception:
+        pass
+
+    if isinstance(o, set):
+        return list(o)
+
+    if isinstance(o, (bytes, bytearray)):
+        try:
+            return o.decode("utf-8")
+        except Exception:
+            return str(o)
+
+    return str(o)
 
 
 class SubmissionStore:
@@ -23,31 +46,8 @@ class SubmissionStore:
     def _now() -> str:
         return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
-    @staticmethod
-    def _json_default(o):
-        """Handle numpy / bytes / sets safely for json.dumps."""
-        try:
-            import numpy as np  # type: ignore
-            if isinstance(o, np.generic):
-                return o.item()
-            if isinstance(o, np.ndarray):
-                return o.tolist()
-        except Exception:
-            pass
-
-        if isinstance(o, set):
-            return list(o)
-
-        if isinstance(o, (bytes, bytearray)):
-            try:
-                return o.decode("utf-8")
-            except Exception:
-                return str(o)
-
-        return str(o)
-
     def _dumps(self, obj: Any) -> str:
-        return json.dumps(obj, ensure_ascii=False, default=self._json_default)
+        return json.dumps(obj, ensure_ascii=False, default=_json_default)
 
     @staticmethod
     def _loads(s: Optional[str], default):
@@ -61,10 +61,6 @@ class SubmissionStore:
     def _has_column(self, conn: sqlite3.Connection, table: str, col: str) -> bool:
         rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
         return any(r["name"] == col for r in rows)
-
-    def _ensure_column(self, conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
-        if not self._has_column(conn, table, col):
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl};")
 
     def _init_db(self) -> None:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -88,7 +84,7 @@ class SubmissionStore:
                 location TEXT,
                 preferences TEXT,
 
-                status TEXT NOT NULL DEFAULT 'NEW',  -- NEW -> GENERATED -> ASSIGNED -> IN_REVIEW -> SENT / ERROR
+                status TEXT NOT NULL DEFAULT 'NEW',   -- NEW -> GENERATED -> IN_REVIEW -> SENT / ERROR
                 resume_token TEXT NOT NULL,
 
                 roadmap_md TEXT,
@@ -96,31 +92,64 @@ class SubmissionStore:
                 ui_timeline_json TEXT,
                 ui_projects_json TEXT,
 
-                assigned_to TEXT,
-                review_notes TEXT,
-                last_action TEXT,
-
                 email_subject TEXT,
                 email_body_text TEXT,
-                sent_at TEXT,
 
-                feedback_rating INTEGER,
-                feedback_text TEXT
+                updated_by TEXT,
+                sent_at TEXT
             );
             """)
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON submissions(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_token ON submissions(resume_token);")
 
-            # Migrations for older DBs (safe on existing db)
-            self._ensure_column(conn, "submissions", "interest_details", "TEXT")
-            self._ensure_column(conn, "submissions", "ui_timeline_json", "TEXT")
-            self._ensure_column(conn, "submissions", "ui_projects_json", "TEXT")
-            self._ensure_column(conn, "submissions", "assigned_to", "TEXT")
-            self._ensure_column(conn, "submissions", "review_notes", "TEXT")
-            self._ensure_column(conn, "submissions", "last_action", "TEXT")
-            self._ensure_column(conn, "submissions", "feedback_rating", "INTEGER")
-            self._ensure_column(conn, "submissions", "feedback_text", "TEXT")
+            # Action log table
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS submission_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                submission_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT,
+                FOREIGN KEY(submission_id) REFERENCES submissions(id)
+            );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_actions_sub ON submission_actions(submission_id);")
+
+            # Backward-safe migrations (if DB already exists)
+            for col, ddl in [
+                ("interest_details", "ALTER TABLE submissions ADD COLUMN interest_details TEXT;"),
+                ("ui_timeline_json", "ALTER TABLE submissions ADD COLUMN ui_timeline_json TEXT;"),
+                ("ui_projects_json", "ALTER TABLE submissions ADD COLUMN ui_projects_json TEXT;"),
+                ("updated_by", "ALTER TABLE submissions ADD COLUMN updated_by TEXT;"),
+                ("sent_at", "ALTER TABLE submissions ADD COLUMN sent_at TEXT;"),
+            ]:
+                if not self._has_column(conn, "submissions", col):
+                    try:
+                        conn.execute(ddl)
+                    except Exception:
+                        pass
+
+    # ----------------- Actions log -----------------
+
+    def log_action(self, submission_id: int, actor: str, action: str, details: str = "") -> None:
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO submission_actions (submission_id, created_at, actor, action, details)
+                VALUES (?, ?, ?, ?, ?)
+            """, (int(submission_id), self._now(), actor or "admin", action, details or ""))
+
+    def get_actions(self, submission_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT created_at, actor, action, details
+                FROM submission_actions
+                WHERE submission_id=?
+                ORDER BY id DESC
+                LIMIT ?
+            """, (int(submission_id), int(limit))).fetchall()
+        return [dict(r) for r in rows]
 
     # ----------------- Student flow -----------------
 
@@ -139,8 +168,8 @@ class SubmissionStore:
                     student_name, student_email, wants_email,
                     grade, average, subjects_json, interests, interest_details,
                     extracurriculars, location, preferences,
-                    status, resume_token, last_action
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, resume_token
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 now, now,
                 payload.get("student_name") or "Student",
@@ -156,7 +185,6 @@ class SubmissionStore:
                 payload.get("preferences") or "",
                 "NEW",
                 resume_token,
-                "created",
             ))
             new_id = cur.lastrowid
 
@@ -167,8 +195,9 @@ class SubmissionStore:
         submission_id: int,
         roadmap_md: str,
         ui_programs: List[Dict[str, Any]],
-        ui_timeline: List[Dict[str, Any]],
-        ui_projects: List[Dict[str, Any]],
+        timeline_events: List[Dict[str, Any]],
+        projects: List[Dict[str, Any]],
+        actor: str = "",
     ) -> None:
         now = self._now()
         with self._conn() as conn:
@@ -180,17 +209,19 @@ class SubmissionStore:
                     ui_programs_json=?,
                     ui_timeline_json=?,
                     ui_projects_json=?,
-                    last_action=?
+                    updated_by=?
                 WHERE id=?
             """, (
                 now,
                 roadmap_md or "",
                 self._dumps(ui_programs or []),
-                self._dumps(ui_timeline or []),
-                self._dumps(ui_projects or []),
-                "generated",
+                self._dumps(timeline_events or []),
+                self._dumps(projects or []),
+                actor or "",
                 int(submission_id),
             ))
+        if actor:
+            self.log_action(submission_id, actor, "GENERATED", "Stored plan + UI payloads")
 
     def get_by_resume_code(self, submission_id: int, token: str) -> Optional[Dict[str, Any]]:
         with self._conn() as conn:
@@ -208,50 +239,55 @@ class SubmissionStore:
         out["ui_projects"] = self._loads(sub.get("ui_projects_json"), [])
         return out
 
-    def save_feedback(self, submission_id: int, rating: int, text: str) -> None:
-        now = self._now()
-        with self._conn() as conn:
-            conn.execute("""
-                UPDATE submissions
-                SET updated_at=?,
-                    feedback_rating=?,
-                    feedback_text=?,
-                    last_action=?
-                WHERE id=?
-            """, (now, int(rating), (text or "").strip(), "feedback", int(submission_id)))
-
     # ----------------- Admin flow -----------------
 
-    def list_queue(self, limit: int = 200) -> List[Dict[str, Any]]:
+    def list_queue(self, status_filter: str = "ALL", query: str = "", limit: int = 200) -> List[Dict[str, Any]]:
+        query = (query or "").strip().lower()
+        status_filter = (status_filter or "ALL").strip().upper()
+
+        where = ["wants_email=1"]
+        params: List[Any] = []
+
+        if status_filter != "ALL":
+            where.append("status=?")
+            params.append(status_filter)
+        else:
+            where.append("status IN ('GENERATED','IN_REVIEW')")
+
+        if query:
+            where.append("(LOWER(student_name) LIKE ? OR LOWER(student_email) LIKE ?)")
+            params.extend([f"%{query}%", f"%{query}%"])
+
+        sql = f"""
+            SELECT id, created_at, student_name, student_email, status
+            FROM submissions
+            WHERE {' AND '.join(where)}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        params.append(int(limit))
+
         with self._conn() as conn:
-            rows = conn.execute("""
-                SELECT id, created_at, student_name, student_email, status, assigned_to
-                FROM submissions
-                WHERE wants_email=1 AND status IN ('GENERATED','ASSIGNED','IN_REVIEW')
-                ORDER BY created_at DESC
-                LIMIT ?
-            """, (int(limit),)).fetchall()
+            rows = conn.execute(sql, tuple(params)).fetchall()
         return [dict(r) for r in rows]
+
+    def get_next_pending(self) -> Optional[Dict[str, Any]]:
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT id, created_at, student_name, student_email, status
+                FROM submissions
+                WHERE wants_email=1 AND status='GENERATED'
+                ORDER BY created_at ASC
+                LIMIT 1
+            """).fetchone()
+        return dict(row) if row else None
 
     def admin_get(self, submission_id: int) -> Optional[Dict[str, Any]]:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM submissions WHERE id=?", (int(submission_id),)).fetchone()
         return dict(row) if row else None
 
-    def admin_assign(self, submission_id: int, assigned_to: str, notes: str = "") -> None:
-        now = self._now()
-        with self._conn() as conn:
-            conn.execute("""
-                UPDATE submissions
-                SET updated_at=?,
-                    status='ASSIGNED',
-                    assigned_to=?,
-                    review_notes=?,
-                    last_action=?
-                WHERE id=?
-            """, (now, (assigned_to or "").strip(), (notes or "").strip(), "assigned", int(submission_id)))
-
-    def admin_save_email(self, submission_id: int, subject: str, body_text: str) -> None:
+    def admin_save_email(self, submission_id: int, subject: str, body_text: str, actor: str = "") -> None:
         now = self._now()
         with self._conn() as conn:
             conn.execute("""
@@ -260,11 +296,13 @@ class SubmissionStore:
                     status='IN_REVIEW',
                     email_subject=?,
                     email_body_text=?,
-                    last_action=?
+                    updated_by=?
                 WHERE id=?
-            """, (now, subject or "", body_text or "", "draft_saved", int(submission_id)))
+            """, (now, subject or "", body_text or "", actor or "", int(submission_id)))
+        if actor:
+            self.log_action(submission_id, actor, "SAVED_DRAFT", (subject or "")[:120])
 
-    def admin_mark_sent(self, submission_id: int) -> None:
+    def admin_mark_sent(self, submission_id: int, actor: str = "") -> None:
         now = self._now()
         with self._conn() as conn:
             conn.execute("""
@@ -272,6 +310,8 @@ class SubmissionStore:
                 SET updated_at=?,
                     status='SENT',
                     sent_at=?,
-                    last_action=?
+                    updated_by=?
                 WHERE id=?
-            """, (now, now, "sent", int(submission_id)))
+            """, (now, now, actor or "", int(submission_id)))
+        if actor:
+            self.log_action(submission_id, actor, "MARKED_SENT", "Manual sent confirmation")
