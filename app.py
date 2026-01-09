@@ -2,12 +2,13 @@
 import gradio as gr
 import logging
 import sys
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 
 from config import Config
 from controllers import Controllers
 from ui.layout import create_ui_layout
 from ui.styles import get_css
+from datetime import date
 
 from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
 from services.submissions_store import SubmissionStore
@@ -49,11 +50,53 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
 
     # ---------------- Helpers ----------------
     def safe_plan_dict(plan: Any) -> Dict[str, Any]:
-        # Expect dict: {"md":..., "profile":..., "programs":..., "phases":...}
+        # New format preferred:
+        # {"md":..., "profile":..., "programs":..., "timeline_events":..., "projects":...}
         if isinstance(plan, dict):
             return plan
-        return {"md": plan or "", "profile": {}, "programs": [], "phases": []}
+    
+        # legacy tuple: (md, programs, phases, profile)
+        if isinstance(plan, (list, tuple)) and len(plan) == 4:
+            md, programs, phases, profile = plan
+            return {
+                "md": md or "",
+                "programs": programs or [],
+                "phases": phases or [],
+                "profile": profile or {},
+            }
+    
+        # fallback: treat as markdown string
+        return {"md": plan or "", "profile": {}, "programs": [], "phases": [], "timeline_events": [], "projects": []}
 
+    def build_timeline_events() -> List[Dict[str, Any]]:
+        today = date.today()
+        year = today.year
+        deadline = date(year, 1, 15)
+        if today > deadline:
+            deadline = date(year + 1, 1, 15)
+    
+        days_left = max(0, (deadline - today).days)
+    
+        return [
+            {
+                "date": today.isoformat(),
+                "title": "Today",
+                "items": [
+                    "Confirm your top 6 Grade 12 U/M courses",
+                    "Shortlist 6–10 programs (safe/target/reach)",
+                ],
+            },
+            {
+                "date": deadline.isoformat(),
+                "title": "OUAC equal consideration target (Jan 15)",
+                "items": [
+                    "Submit applications for equal consideration",
+                    "Double-check supplementary requirements per program",
+                    f"Days left: {days_left}",
+                ],
+            },
+        ]
+    
     def build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email):
         subjects_str = ", ".join(subjects or []) or "—"
         tags_str = ", ".join(tags or []) or "—"
@@ -205,9 +248,12 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "phases": sub_u.get("ui_phases", []),
         }
 
-        timeline_html = render_timeline(plan["profile"], plan["phases"])
+        timeline_events = plan.get("timeline_events") or build_timeline_events()
+        projects = plan.get("projects") or plan.get("phases") or []
+        
+        timeline_html = render_timeline(plan["profile"], timeline_events)
         programs_html = render_program_cards(plan["programs"])
-        checklist_html = render_checklist(plan["phases"])
+        checklist_html = render_checklist(projects)
         full_md = plan["md"] or ""
 
         return (
@@ -280,13 +326,21 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         plan = safe_plan_dict(plan_raw)
 
         # Must have phases/programs to render; if controller still returns md-only, it will render empty blocks.
-        timeline_html = render_timeline(plan.get("profile", {}) or {}, plan.get("phases", []) or [])
+        timeline_events = plan.get("timeline_events") or build_timeline_events()
+        projects = plan.get("projects") or plan.get("phases") or []
+        
+        timeline_html = render_timeline(plan.get("profile", {}) or {}, timeline_events)
         programs_html = render_program_cards(plan.get("programs", []) or [])
-        checklist_html = render_checklist(plan.get("checklist", []) or [])
+        checklist_html = render_checklist(projects)
         full_md = plan.get("md", "") or ""
 
         # 3) store generated outputs
-        store.save_generated_plan(created["id"], full_md, plan.get("programs", []) or [], plan.get("phases", []) or [])
+        store.save_generated_plan(
+            created["id"],
+            full_md,
+            plan.get("programs", []) or [],
+            projects,  # store projects in ui_phases_json (reusing column)
+        )
 
         resume_code = f"{created['id']}:{created['resume_token']}"
         note = f"**Resume code:** `{resume_code}`"

@@ -25,10 +25,6 @@ class SubmissionStore:
 
     @staticmethod
     def _json_default(o):
-        """
-        Makes json.dumps() handle numpy types + a few common non-serializable objects.
-        """
-        # numpy scalar -> python scalar (np.float32, np.int64, etc.)
         try:
             import numpy as np
             if isinstance(o, np.generic):
@@ -37,24 +33,20 @@ class SubmissionStore:
                 return o.tolist()
         except Exception:
             pass
-
-        # sets -> lists
+    
         if isinstance(o, set):
             return list(o)
-
-        # bytes -> utf-8 string fallback
+    
         if isinstance(o, (bytes, bytearray)):
             try:
                 return o.decode("utf-8")
             except Exception:
                 return str(o)
-
-        # last resort
+    
         return str(o)
-
+    
     def _dumps(self, obj) -> str:
-        # IMPORTANT: reference the staticmethod through self (or SubmissionStore._json_default)
-        return json.dumps(obj, ensure_ascii=False, default=self._json_default)
+        return json.dumps(obj, ensure_ascii=False, default=SubmissionStore._json_default)
 
     @staticmethod
     def _loads(s: Optional[str], default):
