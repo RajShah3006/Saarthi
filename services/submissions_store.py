@@ -24,8 +24,37 @@ class SubmissionStore:
         return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     @staticmethod
-    def _dumps(obj: Any) -> str:
-        return json.dumps(obj, ensure_ascii=False)
+    def _json_default(o):
+        """
+        Makes json.dumps() handle numpy types + a few common non-serializable objects.
+        """
+        # numpy scalar -> python scalar (np.float32, np.int64, etc.)
+        try:
+            import numpy as np
+            if isinstance(o, np.generic):
+                return o.item()
+            if isinstance(o, np.ndarray):
+                return o.tolist()
+        except Exception:
+            pass
+
+        # sets -> lists
+        if isinstance(o, set):
+            return list(o)
+
+        # bytes -> utf-8 string fallback
+        if isinstance(o, (bytes, bytearray)):
+            try:
+                return o.decode("utf-8")
+            except Exception:
+                return str(o)
+
+        # last resort
+        return str(o)
+
+    def _dumps(self, obj) -> str:
+        # IMPORTANT: reference the staticmethod through self (or SubmissionStore._json_default)
+        return json.dumps(obj, ensure_ascii=False, default=self._json_default)
 
     @staticmethod
     def _loads(s: Optional[str], default):
@@ -37,18 +66,20 @@ class SubmissionStore:
             return default
 
     def _init_db(self) -> None:
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        # ensure folder exists
+        folder = os.path.dirname(self.db_path)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+
         with self._conn() as conn:
             conn.execute("""
             CREATE TABLE IF NOT EXISTS submissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-
                 student_name TEXT NOT NULL,
                 student_email TEXT,
                 wants_email INTEGER NOT NULL DEFAULT 0,
-
                 grade TEXT NOT NULL,
                 average REAL NOT NULL,
                 subjects_json TEXT NOT NULL,
@@ -56,17 +87,13 @@ class SubmissionStore:
                 extracurriculars TEXT,
                 location TEXT,
                 preferences TEXT,
-
                 status TEXT NOT NULL DEFAULT 'NEW',  -- NEW -> GENERATED -> IN_REVIEW -> SENT
                 resume_token TEXT NOT NULL,
-
                 roadmap_md TEXT,
                 ui_programs_json TEXT,
                 ui_phases_json TEXT,
-
                 email_subject TEXT,
                 email_body_text TEXT,
-
                 sent_at TEXT
             );
             """)
@@ -112,9 +139,13 @@ class SubmissionStore:
 
         return {"id": int(new_id), "resume_token": resume_token}
 
-    def save_generated_plan(self, submission_id: int, roadmap_md: str,
-                            ui_programs: List[Dict[str, Any]],
-                            ui_phases: List[Dict[str, Any]]) -> None:
+    def save_generated_plan(
+        self,
+        submission_id: int,
+        roadmap_md: str,
+        ui_programs: List[Dict[str, Any]],
+        ui_phases: List[Dict[str, Any]],
+    ) -> None:
         now = self._now()
         with self._conn() as conn:
             conn.execute("""

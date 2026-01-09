@@ -11,6 +11,9 @@ logger = logging.getLogger("saarthi.config")
 @dataclass
 class Config:
     """Application configuration"""
+
+    #Admin
+    ADMIN_PIN = os.getenv("ADMIN_PIN", "saarthi-admin")
     
     # API
     GEMINI_API_KEY: str = ""

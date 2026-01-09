@@ -218,6 +218,13 @@ class RoadmapService:
             return ServiceResult.failure(str(e))
 
     def _program_to_payload(self, prog: Program, score: float, bd: Dict[str, Any]) -> Dict[str, Any]:
+        def _to_py_number(x):
+            try:
+                # handles numpy scalars too because they support float()
+                return float(x)
+            except Exception:
+                return x
+
         def g(obj, attr: str, default=None):
             if isinstance(obj, dict):
                 return obj.get(attr, default)
@@ -240,11 +247,11 @@ class RoadmapService:
             "missing_prereqs": bd.get("missing_prereqs", []) if isinstance(bd, dict) else [],
             "grade_assessment": bd.get("grade_assessment") if isinstance(bd, dict) else None,
             "metrics": {
-                "final": bd.get("final") if isinstance(bd, dict) else None,
-                "relevance": bd.get("relevance") if isinstance(bd, dict) else None,
-                "grade": bd.get("grade") if isinstance(bd, dict) else None,
-                "prereq": bd.get("prereq") if isinstance(bd, dict) else None,
-                "location": bd.get("location") if isinstance(bd, dict) else None,
+                "final": _to_py_number(bd.get("final")) if isinstance(bd, dict) else None,
+                "relevance": _to_py_number(bd.get("relevance")) if isinstance(bd, dict) else None,
+                "grade": _to_py_number(bd.get("grade")) if isinstance(bd, dict) else None,
+                "prereq": _to_py_number(bd.get("prereq")) if isinstance(bd, dict) else None,
+                "location": _to_py_number(bd.get("location")) if isinstance(bd, dict) else None,
             },
         }
         return payload

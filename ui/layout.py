@@ -63,10 +63,8 @@ def create_ui_layout(config: Config) -> dict:
             # STEP 1
             with gr.Column(visible=True) as step1:
                 gr.Markdown("### 1) Basics")
-                with gr.Row():
-                    average_input = gr.Slider(50, 100, value=85, step=1, label="Current Average %")
-                    grade_input = gr.Dropdown(choices=config.GRADE_OPTIONS, value="Grade 12", label="Grade Level")
-                location_input = gr.Textbox(label="Location", placeholder="e.g., Toronto, ON", elem_classes="glass-input")
+                average_input = gr.Slider(50, 100, value=85, step=0.1, label="Overall Average %")
+                grade_input = gr.Dropdown(choices=config.GRADE_OPTIONS, value="Grade 12", label="Grade Level")
 
             # STEP 2
             with gr.Column(visible=False) as step2:
@@ -105,6 +103,8 @@ def create_ui_layout(config: Config) -> dict:
                     elem_classes="glass-input",
                     lines=2,
                 )
+                location_input = gr.Textbox(label="Location", placeholder="e.g., Toronto, ON", elem_classes="glass-input")
+
 
             # STEP 4
             with gr.Column(visible=False) as step4:

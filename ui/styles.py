@@ -1336,4 +1336,71 @@ def get_css(config: Config) -> str:
     .chk:hover { background: rgba(255,255,255,0.04); }
     .chk input { transform: scale(1.05); margin-right: 10px; }
 
+    /* =========================================================
+   REMOVE GRADIO BLUE BORDERS / OUTLINES (global override)
+   ========================================================= */
+
+    /* Your missing classes (so Gradio doesn't use default bordered blocks) */
+    .glass-panel {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    
+    .glass-input input,
+    .glass-input textarea,
+    .glass-input select {
+      background: rgba(4, 7, 16, 0.55) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      color: rgba(255,255,255,0.92) !important;
+      border-radius: 14px !important;
+      box-shadow: none !important;
+    }
+    
+    .glass-input input:focus,
+    .glass-input textarea:focus,
+    .glass-input select:focus {
+      outline: none !important;
+      border-color: rgba(255,255,255,0.18) !important;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.06) !important;
+    }
+    
+    /* Kill borders on Gradio wrappers that create those blue lines */
+    .gradio-container .wrap,
+    .gradio-container .block,
+    .gradio-container .gr-panel,
+    .gradio-container .gr-box,
+    .gradio-container .gr-form,
+    .gradio-container .gr-accordion,
+    .gradio-container .gr-group,
+    .gradio-container .form,
+    .gradio-container .container {
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+    }
+    
+    /* Also remove focus ring Gradio applies to some buttons/components */
+    .gradio-container button:focus,
+    .gradio-container button:focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+    
+    /* Make markdown separators subtle (your --- lines) */
+    .gradio-container hr {
+      border: 0 !important;
+      height: 1px !important;
+      background: rgba(255,255,255,0.10) !important;
+      margin: 16px 0 !important;
+    }
+    
+    /* Optional: reduce the “boxed” feeling on markdown blocks */
+    .gradio-container .markdown,
+    .gradio-container .prose {
+      border: none !important;
+      box-shadow: none !important;
+    }
+    
     """
