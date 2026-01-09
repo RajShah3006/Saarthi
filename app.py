@@ -3,7 +3,7 @@ import gradio as gr
 import logging
 import sys
 from typing import Any, Dict, Tuple, List
-from datetime import date, timedelta
+from datetime import date
 
 from config import Config
 from controllers import Controllers
@@ -23,25 +23,23 @@ logger = logging.getLogger("saarthi")
 
 store = SubmissionStore()
 
-
-def safe_plan_dict(plan: Any) -> Dict[str, Any]:
-    if isinstance(plan, dict):
-        return plan
-    return {"md": plan or "", "profile": {}, "programs": [], "timeline_events": [], "projects": []}
+_APP_CSS = None
+_APP_THEME = None
 
 
-def build_timeline_events_fallback() -> List[Dict[str, Any]]:
-    today = date.today()
-    deadline = date(today.year, 1, 15)
-    if today > deadline:
-        deadline = date(today.year + 1, 1, 15)
+def create_app() -> gr.Blocks:
+    global _APP_CSS, _APP_THEME
 
-    days_left = max(0, (deadline - today).days)
-    return [
-        {"date": today.isoformat(), "title": "Today", "items": ["Confirm prerequisites + top 6 U/M courses", "Pick 6–10 programs (safe/target/reach)"]},
-        {"date": (today + timedelta(days=7)).isoformat(), "title": "Within 7 days", "items": ["Save links + requirements for each program", "Start a tracker: program • prereqs • admission • link"]},
-        {"date": deadline.isoformat(), "title": "OUAC Equal Consideration (Jan 15)", "items": [f"Submit for equal consideration (days left: {days_left})", "Double-check supplements per program"]},
-    ]
+    config = Config()
+    controllers = Controllers(config)
+    _APP_CSS = get_css(config)
+    _APP_THEME = gr.themes.Soft(primary_hue="blue", secondary_hue="purple", neutral_hue="slate")
+
+    with gr.Blocks(title="Saarthi AI - University Guidance") as app:
+        components = create_ui_layout(config)
+        wire_events(components, controllers, config)
+
+    return app
 
 
 def wire_events(components: dict, controllers: Controllers, config: Config):
@@ -53,26 +51,42 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     student = components["student"]
 
     # ---------------- Helpers ----------------
-    def build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email):
-        subjects_str = ", ".join(subjects or []) or "—"
-        tags_str = ", ".join(tags or []) or "—"
-        details = (details or "").strip() or "—"
-        extracurriculars = (extracurriculars or "").strip() or "—"
-        location = (location or "").strip() or "—"
-        preferences = (preferences or "").strip() or "—"
-        email_line = f"Yes ({email.strip()})" if wants_email and (email or "").strip() else ("Yes (missing email!)" if wants_email else "No")
+    def safe_plan_dict(plan: Any, fallback_profile: Dict[str, Any]) -> Dict[str, Any]:
+        # preferred: dict
+        if isinstance(plan, dict):
+            out = dict(plan)
+            out.setdefault("profile", fallback_profile)
+            out.setdefault("programs", [])
+            out.setdefault("timeline_events", [])
+            out.setdefault("projects", [])
+            out.setdefault("md", out.get("message", "") or out.get("md", "") or "")
+            return out
 
-        return (
-            f"**Grade:** {grade}  \n"
-            f"**Average:** {average}%  \n"
-            f"**Location:** {location}  \n\n"
-            f"**Subjects:** {subjects_str}  \n\n"
-            f"**Interests:** {tags_str}  \n"
-            f"**Details:** {details}  \n\n"
-            f"**Extracurriculars:** {extracurriculars}  \n"
-            f"**Preferences:** {preferences}  \n\n"
-            f"**Email response:** {email_line}"
-        )
+        # ServiceResult-like
+        if hasattr(plan, "data") and isinstance(getattr(plan, "data", None), dict):
+            d = plan.data
+            md = getattr(plan, "message", "") or d.get("md", "") or ""
+            out = {
+                "md": md,
+                "profile": d.get("profile") or fallback_profile,
+                "programs": d.get("programs") or [],
+                "timeline_events": d.get("timeline_events") or [],
+                "projects": d.get("projects") or d.get("checklist") or [],
+            }
+            return out
+
+        # legacy tuple: (md, programs, phases, profile)
+        if isinstance(plan, (list, tuple)) and len(plan) == 4:
+            md, programs, phases, prof = plan
+            return {
+                "md": md or "",
+                "profile": prof or fallback_profile,
+                "programs": programs or [],
+                "timeline_events": phases or [],
+                "projects": [],
+            }
+
+        return {"md": str(plan or ""), "profile": fallback_profile, "programs": [], "timeline_events": [], "projects": []}
 
     def parse_resume_code(code: str) -> Tuple[int, str]:
         code = (code or "").strip()
@@ -83,6 +97,25 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             return (int(a.strip()), b.strip())
         except Exception:
             return (0, "")
+
+    def build_review(grade, average, location, tags, details, subjects, wants_email, email) -> str:
+        tags_str = ", ".join(tags or []) or "—"
+        subjects_str = ", ".join(subjects or []) or "—"
+        details = (details or "").strip() or "—"
+        location = (location or "").strip() or "—"
+        email_line = "No"
+        if wants_email:
+            email_line = f"Yes ({email.strip()})" if (email or "").strip() else "Yes (missing email!)"
+
+        return (
+            f"**Grade:** {grade}  \n"
+            f"**Average:** {average}%  \n"
+            f"**Location:** {location}  \n\n"
+            f"**Interests:** {tags_str}  \n"
+            f"**Details:** {details}  \n\n"
+            f"**Subjects:** {subjects_str}  \n\n"
+            f"**Email response:** {email_line}"
+        )
 
     # ---------------- Login ----------------
     def on_start(name: str):
@@ -128,12 +161,12 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             gr.update(interactive=(step == 4)),
         )
 
-    def on_next(step, subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email):
+    def on_next(step, grade, average, location, tags, details, subjects, wants_email, email):
         new_step = min(4, int(step) + 1)
         base = set_step(new_step)
         review = gr.update()
         if new_step == 4:
-            review = gr.update(value=build_review(subjects, tags, details, extracurriculars, average, grade, location, preferences, wants_email, email))
+            review = gr.update(value=build_review(grade, average, location, tags, details, subjects, wants_email, email))
         return (*base, review)
 
     def on_back(step):
@@ -143,14 +176,12 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         fn=on_next,
         inputs=[
             student["wizard_step"],
-            student["subjects_input"],
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
             student["interest_tags_input"],
             student["interest_details_input"],
-            student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
-            student["preferences_input"],
+            student["subjects_input"],
             student["wants_email"],
             student["student_email"],
         ],
@@ -176,59 +207,84 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------------- Resume (from LOGIN) ----------------
+    # ---------------- Resume ----------------
     def on_resume(code: str):
         sid, token = parse_resume_code(code)
         if not sid or not token:
-            return gr.update(value="❌ Invalid code. Use format: `id:token`"), gr.update()
+            return gr.update(value="❌ Invalid code. Use format: `id:token`"), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         sub = store.get_by_resume_code(sid, token)
         if not sub:
-            return gr.update(value="❌ Not found. Check the code again."), gr.update()
+            return gr.update(value="❌ Not found. Check the code again."), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         sub_u = store.unpack(sub)
-        wants_email = bool(sub_u.get("wants_email"))
 
-        # If it was email-only, show the email notice screen
-        if wants_email:
-            msg = (
-                "✅ Submission found.\n\n"
-                "You requested an email response. A team member will review and send it soon.\n\n"
-                f"**Resume code:** `{sid}:{token}`"
-            )
-            return gr.update(value="✅ Loaded."), gr.update(value=msg)
+        profile = {
+            "interest": sub_u.get("interests", ""),
+            "grade": sub_u.get("grade", ""),
+            "avg": sub_u.get("average", ""),
+            "subjects": ", ".join((sub_u.get("subjects") or [])[:6]),
+        }
 
-        # Otherwise OK
-        return gr.update(value="✅ Loaded. Click Start Session to view it."), gr.update()
+        timeline_events = sub_u.get("ui_timeline") or []
+        projects = sub_u.get("ui_projects") or []   # ✅ this is the checklist source
+        programs = sub_u.get("ui_programs") or []
+        full_md = sub_u.get("roadmap_md") or ""
+
+        timeline_html = render_timeline(profile, timeline_events)
+        programs_html = render_program_cards(programs)
+        checklist_html = render_checklist(projects)  # ✅ now renders correctly
+
+        note = f"**Resume code:** `{sid}:{token}`"
+        return (
+            gr.update(value="✅ Loaded saved roadmap."),
+            gr.update(value=note),
+            gr.update(visible=False),
+            gr.update(visible=True),
+            "outputs",
+            timeline_html,
+            programs_html,
+            checklist_html,
+            full_md,
+        )
 
     login["resume_btn"].click(
         fn=on_resume,
         inputs=[login["resume_code_input"]],
-        outputs=[login["resume_status"], login["resume_code_input"]],
+        outputs=[
+            login["resume_status"],
+            student["submission_code_out"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+        ],
     )
 
-    # ---------------- Generate (store + maybe show dashboard) ----------------
-    def generate_and_show(subjects, interest_tags, interest_details, extracurriculars, average, grade,
-                          location, preferences, wants_email, student_email, session_id, student_name):
+    # ---------------- Generate (store + render + switch view) ----------------
+    def generate_and_show(
+        grade, average, location,
+        tags, details,
+        subjects,
+        extracurriculars, preferences,
+        wants_email, student_email,
+        session_id, student_name
+    ):
+        tags_clean = [t.strip() for t in (tags or []) if t and t.strip()]
+        details_clean = (details or "").strip()
+        interests = ", ".join(tags_clean) if tags_clean else ""
+        if details_clean:
+            interests = (interests + f"; Details: {details_clean}").strip("; ").strip()
 
-        # validate email if wants_email
         if wants_email and not (student_email or "").strip():
             return (
-                gr.update(value="❌ Please enter your email in Step 1."),
+                gr.update(value="❌ Email is required if you request an email response."),
                 gr.update(), gr.update(), gr.update(), gr.update(),
                 gr.update(), gr.update(), gr.update(), gr.update(),
-                gr.update(), gr.update(),
             )
-
-        tags = [t.strip() for t in (interest_tags or []) if t and t.strip()]
-        details = (interest_details or "").strip()
-
-        if tags and details:
-            interests = f"{', '.join(tags)}; Details: {details}"
-        elif tags:
-            interests = ", ".join(tags)
-        else:
-            interests = details
 
         created = store.create_submission({
             "student_name": student_name or "Student",
@@ -238,38 +294,48 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "average": float(average),
             "subjects": subjects or [],
             "interests": interests,
+            "interest_details": details_clean,
             "extracurriculars": extracurriculars or "",
             "location": location or "",
             "preferences": preferences or "",
         })
 
+        fallback_profile = {
+            "interest": interests,
+            "grade": grade,
+            "avg": average,
+            "subjects": ", ".join((subjects or [])[:6]),
+        }
+
         plan_raw = controllers.handle_generate_roadmap(
             subjects, interests, extracurriculars, average, grade, location, preferences, session_id
         )
-        plan = safe_plan_dict(plan_raw)
+        plan = safe_plan_dict(plan_raw, fallback_profile)
 
-        # fallback if service doesn’t provide these
-        timeline_events = plan.get("timeline_events") or build_timeline_events_fallback()
+        programs = plan.get("programs") or []
+        timeline_events = plan.get("timeline_events") or []
         projects = plan.get("projects") or []
+        full_md = plan.get("md") or ""
 
-        # store generated outputs
+        # store: ✅ projects saved separately so checklist tab works after resume too
         store.save_generated_plan(
             created["id"],
-            plan.get("md", "") or "",
-            plan.get("programs", []) or [],
-            projects,  # store projects in ui_phases_json column
+            full_md,
+            programs,
+            timeline_events,
+            projects,
         )
 
         resume_code = f"{created['id']}:{created['resume_token']}"
         note = f"**Resume code:** `{resume_code}`"
 
-        # EMAIL-ONLY path (do NOT show dashboard)
+        # If email requested: DON'T show roadmap, show confirmation only.
         if wants_email:
             msg = (
-                "✅ Thanks! Your request has been submitted.\n\n"
-                "You chose **Email me the results**.\n"
-                "A team member will review your roadmap, tailor the email, and send it to you.\n\n"
-                f"{note}"
+                "✅ **Request received.**\n\n"
+                "A team member will review your roadmap and send you a personalized email.\n\n"
+                "Save this resume code in case you want to come back later:\n\n"
+                f"`{resume_code}`"
             )
             return (
                 gr.update(value=""),
@@ -277,29 +343,22 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 gr.update(visible=False),
                 gr.update(visible=True),
                 "outputs",
-                gr.update(visible=True, value=msg),     # email_only_notice
-                gr.update(visible=False),               # dashboard_tabs_col hidden
-                "<div class='card-empty'>Email delivery selected.</div>",
-                "<div class='card-empty'>Email delivery selected.</div>",
-                "<div class='card-empty'>Email delivery selected.</div>",
+                "<div class='card-empty'>Email requested — timeline will arrive by email after review.</div>",
+                "<div class='card-empty'>Email requested — program details will arrive by email after review.</div>",
+                "<div class='card-empty'>Email requested — checklist will arrive by email after review.</div>",
                 msg,
             )
 
-        # DISPLAY path (show dashboard)
-        profile = plan.get("profile", {}) or {}
-        timeline_html = render_timeline(profile, timeline_events)
-        programs_html = render_program_cards(plan.get("programs", []) or [])
-        checklist_html = render_checklist(projects)
-        full_md = plan.get("md", "") or ""
-
+        # Otherwise show results
+        timeline_html = render_timeline(plan.get("profile") or fallback_profile, timeline_events)
+        programs_html = render_program_cards(programs)
+        checklist_html = render_checklist(projects)  # ✅ fix
         return (
             gr.update(value=""),
             gr.update(value=note),
             gr.update(visible=False),
             gr.update(visible=True),
             "outputs",
-            gr.update(visible=False, value=""),        # email_only_notice hidden
-            gr.update(visible=True),                   # dashboard_tabs_col visible
             timeline_html,
             programs_html,
             checklist_html,
@@ -309,13 +368,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     student["generate_btn"].click(
         fn=generate_and_show,
         inputs=[
-            student["subjects_input"],
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
             student["interest_tags_input"],
             student["interest_details_input"],
+            student["subjects_input"],
             student["extracurriculars_input"],
-            student["average_input"],
-            student["grade_input"],
-            student["location_input"],
             student["preferences_input"],
             student["wants_email"],
             student["student_email"],
@@ -323,13 +382,11 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             name_state,
         ],
         outputs=[
-            student["review_box"],
+            login["resume_status"],
             student["submission_code_out"],
             student["inputs_view"],
             student["outputs_view"],
             view_state,
-            student["email_only_notice"],
-            student["dashboard_tabs_col"],
             student["timeline_display"],
             student["programs_display"],
             student["checklist_display"],
@@ -363,7 +420,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------------- Follow-up ----------------
+    # Follow-up (updates markdown only)
     def followup(question, current_md, session_id):
         cleared_q, new_md = controllers.handle_followup(question, current_md, session_id)
         return cleared_q, gr.update(), gr.update(), gr.update(), new_md
@@ -392,8 +449,45 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
+    # Exports (use markdown as plain text)
+    def export_txt(md: str) -> str:
+        import os, tempfile
+        p = os.path.join(tempfile.gettempdir(), "saarthi_roadmap.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(md or "")
+        return p
+
+    student["export_pdf_btn"].click(
+        fn=lambda md: export_txt(md),  # safe default (no dependency risk)
+        inputs=[student["output_display"]],
+        outputs=[student["download_file"]],
+    )
+
+    student["export_docx_btn"].click(
+        fn=lambda md: export_txt(md),  # safe default (no dependency risk)
+        inputs=[student["output_display"]],
+        outputs=[student["download_file"]],
+    )
+
+    # Feedback
+    def submit_feedback(rating: str, text: str, code_md: str):
+        # extract id from submission_code_out: **Resume code:** `id:token`
+        import re
+        m = re.search(r"`(\d+):", code_md or "")
+        if not m:
+            return "⚠️ Feedback saved locally (no submission id found)."
+        sid = int(m.group(1))
+        store.save_feedback(sid, int(rating), text or "")
+        return "✅ Thanks — feedback received."
+
+    student["feedback_btn"].click(
+        fn=submit_feedback,
+        inputs=[student["feedback_rating"], student["feedback_text"], student["submission_code_out"]],
+        outputs=[student["feedback_status"]],
+    )
+
     # =========================
-    # ADMIN
+    # ADMIN (approval workflow)
     # =========================
     def admin_unlock(pin: str):
         expected = getattr(config, "ADMIN_PIN", "") or ""
@@ -411,13 +505,10 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
 
     def refresh_queue():
         rows = store.list_queue(limit=200)
-        return [[r["id"], r["created_at"], r["student_name"], r["student_email"], r["status"]] for r in rows]
+        table = [[r["id"], r["created_at"], r["student_name"], r["student_email"], r["status"], (r.get("assigned_to") or "")] for r in rows]
+        return table
 
-    student["refresh_queue_btn"].click(
-        fn=refresh_queue,
-        inputs=[],
-        outputs=[student["queue_table"]],
-    )
+    student["refresh_queue_btn"].click(fn=refresh_queue, inputs=[], outputs=[student["queue_table"]])
 
     def admin_load(submission_id: float):
         if submission_id is None:
@@ -436,17 +527,30 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         if email:
             import urllib.parse
             mailto = (
-                f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}"
-                f"?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>"
-                "Open email draft in mail client</a>"
+                "<div class='hint-text'>"
+                + f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}"
+                + f"?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>"
+                + "Open draft in mail client</a></div>"
             )
 
-        return plan_md, subj, body, (mailto or ""), ""
+        return plan_md, subj, body, mailto, "✅ Loaded."
 
     student["load_btn"].click(
         fn=admin_load,
         inputs=[student["review_id"]],
         outputs=[student["admin_plan_md"], student["email_subject"], student["email_body"], student["gmail_helper"], student["admin_status"]],
+    )
+
+    def admin_assign(submission_id: float, assigned_to: str, notes: str):
+        if submission_id is None:
+            return "❌ Pick a submission ID first."
+        store.admin_assign(int(submission_id), assigned_to or "", notes or "")
+        return "✅ Assigned."
+
+    student["assign_btn"].click(
+        fn=admin_assign,
+        inputs=[student["review_id"], student["assigned_to"], student["review_notes"]],
+        outputs=[student["admin_status"]],
     )
 
     def admin_autofill(submission_id: float):
@@ -485,23 +589,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     )
 
 
-def create_app() -> gr.Blocks:
-    config = Config()
-    controllers = Controllers(config)
-    css = get_css(config)
-
-    theme = gr.themes.Soft(primary_hue="blue", secondary_hue="purple", neutral_hue="slate")
-
-    with gr.Blocks(title="Saarthi AI - University Guidance") as app:
-        components = create_ui_layout(config)
-        wire_events(components, controllers, config)
-
-    # Gradio 6 prefers css/theme in launch; you can keep in Blocks too, but this avoids the warning.
-    app._saarthi_css = css
-    app._saarthi_theme = theme
-    return app
-
-
 if __name__ == "__main__":
     app = create_app()
     app.launch(
@@ -509,6 +596,6 @@ if __name__ == "__main__":
         server_port=7860,
         share=False,
         show_error=True,
-        css=getattr(app, "_saarthi_css", None),
-        theme=getattr(app, "_saarthi_theme", None),
+        css=_APP_CSS,
+        theme=_APP_THEME,
     )

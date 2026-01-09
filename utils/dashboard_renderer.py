@@ -72,7 +72,7 @@ def render_checklist(project_sections: List[Dict[str, Any]]) -> str:
         return "<div class='card-empty'>No checklist yet.</div>"
 
     blocks = []
-    for sec in project_sections[:8]:
+    for sec in project_sections[:6]:
         title = sec.get("title", "Checklist")
         items = sec.get("items", []) or []
         checks = "".join(
@@ -114,16 +114,16 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
         return f"<div class='timeline-wrap'>{header}<div class='card-empty'>Generate a roadmap to see a timeline.</div></div>"
 
     items_html = []
-    for ev in timeline_events[:10]:
+    for ev in timeline_events[:8]:
+        dt = ev.get("date", "")
         title = ev.get("title", "")
-        d = ev.get("date", "")
         items = ev.get("items", []) or []
-        li = "".join([f"<li>{_esc(x)}</li>" for x in items[:8]])
+        li = "".join([f"<li>{_esc(x)}</li>" for x in items[:7]])
         items_html.append(f"""
         <div class="t-item">
           <div class="t-dot"></div>
           <div class="t-card">
-            <div class="t-title">{_esc(d)} — {_esc(title)}</div>
+            <div class="t-title">{_esc(dt)} — {_esc(title)}</div>
             <ul class="t-list">{li}</ul>
           </div>
         </div>
@@ -132,7 +132,8 @@ def render_timeline(profile: Dict[str, Any], timeline_events: List[Dict[str, Any
     return f"""
     <div class="timeline-wrap">
       {header}
-      <div class="timeline-head">OUAC Timeline</div>
+      <div class="timeline-head">Timeline</div>
       <div class="timeline">{''.join(items_html)}</div>
     </div>
     """
+    

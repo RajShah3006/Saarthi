@@ -25,28 +25,29 @@ class SubmissionStore:
 
     @staticmethod
     def _json_default(o):
+        """Handle numpy / bytes / sets safely for json.dumps."""
         try:
-            import numpy as np
+            import numpy as np  # type: ignore
             if isinstance(o, np.generic):
                 return o.item()
             if isinstance(o, np.ndarray):
                 return o.tolist()
         except Exception:
             pass
-    
+
         if isinstance(o, set):
             return list(o)
-    
+
         if isinstance(o, (bytes, bytearray)):
             try:
                 return o.decode("utf-8")
             except Exception:
                 return str(o)
-    
+
         return str(o)
-    
-    def _dumps(self, obj) -> str:
-        return json.dumps(obj, ensure_ascii=False, default=SubmissionStore._json_default)
+
+    def _dumps(self, obj: Any) -> str:
+        return json.dumps(obj, ensure_ascii=False, default=self._json_default)
 
     @staticmethod
     def _loads(s: Optional[str], default):
@@ -57,41 +58,69 @@ class SubmissionStore:
         except Exception:
             return default
 
-    def _init_db(self) -> None:
-        # ensure folder exists
-        folder = os.path.dirname(self.db_path)
-        if folder:
-            os.makedirs(folder, exist_ok=True)
+    def _has_column(self, conn: sqlite3.Connection, table: str, col: str) -> bool:
+        rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
+        return any(r["name"] == col for r in rows)
 
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
+        if not self._has_column(conn, table, col):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl};")
+
+    def _init_db(self) -> None:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         with self._conn() as conn:
             conn.execute("""
             CREATE TABLE IF NOT EXISTS submissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+
                 student_name TEXT NOT NULL,
                 student_email TEXT,
                 wants_email INTEGER NOT NULL DEFAULT 0,
+
                 grade TEXT NOT NULL,
                 average REAL NOT NULL,
                 subjects_json TEXT NOT NULL,
                 interests TEXT NOT NULL,
+                interest_details TEXT,
                 extracurriculars TEXT,
                 location TEXT,
                 preferences TEXT,
-                status TEXT NOT NULL DEFAULT 'NEW',  -- NEW -> GENERATED -> IN_REVIEW -> SENT
+
+                status TEXT NOT NULL DEFAULT 'NEW',  -- NEW -> GENERATED -> ASSIGNED -> IN_REVIEW -> SENT / ERROR
                 resume_token TEXT NOT NULL,
+
                 roadmap_md TEXT,
                 ui_programs_json TEXT,
-                ui_phases_json TEXT,
+                ui_timeline_json TEXT,
+                ui_projects_json TEXT,
+
+                assigned_to TEXT,
+                review_notes TEXT,
+                last_action TEXT,
+
                 email_subject TEXT,
                 email_body_text TEXT,
-                sent_at TEXT
+                sent_at TEXT,
+
+                feedback_rating INTEGER,
+                feedback_text TEXT
             );
             """)
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON submissions(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_token ON submissions(resume_token);")
+
+            # Migrations for older DBs (safe on existing db)
+            self._ensure_column(conn, "submissions", "interest_details", "TEXT")
+            self._ensure_column(conn, "submissions", "ui_timeline_json", "TEXT")
+            self._ensure_column(conn, "submissions", "ui_projects_json", "TEXT")
+            self._ensure_column(conn, "submissions", "assigned_to", "TEXT")
+            self._ensure_column(conn, "submissions", "review_notes", "TEXT")
+            self._ensure_column(conn, "submissions", "last_action", "TEXT")
+            self._ensure_column(conn, "submissions", "feedback_rating", "INTEGER")
+            self._ensure_column(conn, "submissions", "feedback_text", "TEXT")
 
     # ----------------- Student flow -----------------
 
@@ -108,24 +137,26 @@ class SubmissionStore:
                 INSERT INTO submissions (
                     created_at, updated_at,
                     student_name, student_email, wants_email,
-                    grade, average, subjects_json, interests,
+                    grade, average, subjects_json, interests, interest_details,
                     extracurriculars, location, preferences,
-                    status, resume_token
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, resume_token, last_action
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 now, now,
-                payload["student_name"],
-                payload.get("student_email") or "",
+                payload.get("student_name") or "Student",
+                (payload.get("student_email") or "").strip(),
                 1 if payload.get("wants_email") else 0,
-                payload["grade"],
-                float(payload["average"]),
+                payload.get("grade") or "Grade 12",
+                float(payload.get("average") or 0),
                 self._dumps(subjects),
-                payload["interests"],
+                payload.get("interests") or "",
+                payload.get("interest_details") or "",
                 payload.get("extracurriculars") or "",
                 payload.get("location") or "",
                 payload.get("preferences") or "",
                 "NEW",
                 resume_token,
+                "created",
             ))
             new_id = cur.lastrowid
 
@@ -136,7 +167,8 @@ class SubmissionStore:
         submission_id: int,
         roadmap_md: str,
         ui_programs: List[Dict[str, Any]],
-        ui_phases: List[Dict[str, Any]],
+        ui_timeline: List[Dict[str, Any]],
+        ui_projects: List[Dict[str, Any]],
     ) -> None:
         now = self._now()
         with self._conn() as conn:
@@ -146,13 +178,17 @@ class SubmissionStore:
                     status='GENERATED',
                     roadmap_md=?,
                     ui_programs_json=?,
-                    ui_phases_json=?
+                    ui_timeline_json=?,
+                    ui_projects_json=?,
+                    last_action=?
                 WHERE id=?
             """, (
                 now,
                 roadmap_md or "",
                 self._dumps(ui_programs or []),
-                self._dumps(ui_phases or []),
+                self._dumps(ui_timeline or []),
+                self._dumps(ui_projects or []),
+                "generated",
                 int(submission_id),
             ))
 
@@ -168,17 +204,30 @@ class SubmissionStore:
         out = dict(sub)
         out["subjects"] = self._loads(sub.get("subjects_json"), [])
         out["ui_programs"] = self._loads(sub.get("ui_programs_json"), [])
-        out["ui_phases"] = self._loads(sub.get("ui_phases_json"), [])
+        out["ui_timeline"] = self._loads(sub.get("ui_timeline_json"), [])
+        out["ui_projects"] = self._loads(sub.get("ui_projects_json"), [])
         return out
+
+    def save_feedback(self, submission_id: int, rating: int, text: str) -> None:
+        now = self._now()
+        with self._conn() as conn:
+            conn.execute("""
+                UPDATE submissions
+                SET updated_at=?,
+                    feedback_rating=?,
+                    feedback_text=?,
+                    last_action=?
+                WHERE id=?
+            """, (now, int(rating), (text or "").strip(), "feedback", int(submission_id)))
 
     # ----------------- Admin flow -----------------
 
-    def list_queue(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def list_queue(self, limit: int = 200) -> List[Dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
-                SELECT id, created_at, student_name, student_email, wants_email, status
+                SELECT id, created_at, student_name, student_email, status, assigned_to
                 FROM submissions
-                WHERE wants_email=1 AND status IN ('GENERATED','IN_REVIEW')
+                WHERE wants_email=1 AND status IN ('GENERATED','ASSIGNED','IN_REVIEW')
                 ORDER BY created_at DESC
                 LIMIT ?
             """, (int(limit),)).fetchall()
@@ -189,6 +238,19 @@ class SubmissionStore:
             row = conn.execute("SELECT * FROM submissions WHERE id=?", (int(submission_id),)).fetchone()
         return dict(row) if row else None
 
+    def admin_assign(self, submission_id: int, assigned_to: str, notes: str = "") -> None:
+        now = self._now()
+        with self._conn() as conn:
+            conn.execute("""
+                UPDATE submissions
+                SET updated_at=?,
+                    status='ASSIGNED',
+                    assigned_to=?,
+                    review_notes=?,
+                    last_action=?
+                WHERE id=?
+            """, (now, (assigned_to or "").strip(), (notes or "").strip(), "assigned", int(submission_id)))
+
     def admin_save_email(self, submission_id: int, subject: str, body_text: str) -> None:
         now = self._now()
         with self._conn() as conn:
@@ -197,9 +259,10 @@ class SubmissionStore:
                 SET updated_at=?,
                     status='IN_REVIEW',
                     email_subject=?,
-                    email_body_text=?
+                    email_body_text=?,
+                    last_action=?
                 WHERE id=?
-            """, (now, subject or "", body_text or "", int(submission_id)))
+            """, (now, subject or "", body_text or "", "draft_saved", int(submission_id)))
 
     def admin_mark_sent(self, submission_id: int) -> None:
         now = self._now()
@@ -208,6 +271,7 @@ class SubmissionStore:
                 UPDATE submissions
                 SET updated_at=?,
                     status='SENT',
-                    sent_at=?
+                    sent_at=?,
+                    last_action=?
                 WHERE id=?
-            """, (now, now, int(submission_id)))
+            """, (now, now, "sent", int(submission_id)))
