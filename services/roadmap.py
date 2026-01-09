@@ -160,17 +160,62 @@ class RoadmapService:
 '''
 # services/roadmap.py
 import logging
+import re
+from datetime import date, datetime
 from typing import List, Tuple, Dict, Any
 
 from config import Config
 from models import StudentProfile, Session, ServiceResult, Program
-
 from services.llm_client import LLMClient
 from services.program_search import ProgramSearchService
 from prompts.templates import PromptTemplates
 
 logger = logging.getLogger("saarthi.roadmap")
 
+COURSE_CODE_RE = re.compile(r"\b([A-Za-z]{3}\d[A-Za-z])\b")  # e.g., MHF4U, SCH4U, etc. (case-insensitive)
+
+def _today_iso() -> str:
+    return date.today().isoformat()
+
+def _parse_ouac_deadline() -> date:
+    """
+    Equal consideration is typically Jan 15.
+    For current cycle (today <= Jan 15), use this year's Jan 15.
+    If today passed, use next year's Jan 15.
+    """
+    today = date.today()
+    yr = today.year
+    dl = date(yr, 1, 15)
+    if today > dl:
+        dl = date(yr + 1, 1, 15)
+    return dl
+
+def _iso(d: date) -> str:
+    return d.isoformat()
+
+def _clean_course_codes(text: str) -> List[str]:
+    if not text:
+        return []
+    hits = [m.group(1).upper() for m in COURSE_CODE_RE.finditer(text)]
+    # normalize last letter to U/M (sometimes weird cases)
+    out = []
+    seen = set()
+    for h in hits:
+        h = h.replace("O", "0")
+        if h not in seen:
+            seen.add(h)
+            out.append(h)
+    return out[:12]
+
+def _clean_prereq_display(text: str) -> str:
+    # Prefer showing just course codes if they exist
+    codes = _clean_course_codes(text or "")
+    if codes:
+        return ", ".join(codes)
+    # fallback: compact the string
+    s = re.sub(r"\s+", " ", (text or "")).strip()
+    s = re.sub(r",\s*,+", ", ", s).strip(" ,")
+    return s[:180] + ("…" if len(s) > 180 else "")
 
 class RoadmapService:
     def __init__(self, config: Config, llm_client: LLMClient, program_search: ProgramSearchService):
@@ -181,50 +226,42 @@ class RoadmapService:
 
     def generate(self, profile: StudentProfile, session: Session) -> ServiceResult:
         try:
-            logger.info(f"Generating for: {profile.interests}")
-
             results = self.search.search_with_profile(profile, self.config.TOP_K_PROGRAMS)
             if not results:
                 return ServiceResult.failure("No programs found.")
 
             programs_for_prompt = [p for p, _, _ in results]
 
-            # LLM analysis only (no steps/program list repetition)
+            # 1) AI ANALYSIS (content)
             prompt = self.prompts.roadmap_prompt(profile, programs_for_prompt)
-            analysis = self.llm.generate(prompt, self.prompts.roadmap_system_prompt()) or ""
+            analysis = (self.llm.generate(prompt, self.prompts.roadmap_system_prompt()) or "").strip()
 
-            # UI payload programs
+            # 2) UI programs (cleaned fields)
             ui_programs = [self._program_to_payload(p, score, bd) for (p, score, bd) in results]
 
-            # Deterministic phases (no duplication ever)
-            phases = self._build_phases(profile, ui_programs)
-            checklist = self._build_checklist(profile, ui_programs, phases)
+            # 3) Unique timeline + unique checklist projects
+            timeline_events = self._build_timeline(profile)
+            projects = self._build_projects(profile)
 
-            # Full plan markdown (deterministic sections)
-            full_md = self._format_full_plan(profile, ui_programs, analysis, phases)
+            # 4) Full plan: ask AI to FORMAT ONLY (no new facts)
+            full_md = self._format_full_plan_ai(profile, ui_programs, analysis, timeline_events, projects)
 
             return ServiceResult.success(
-            message=full_md,
-            data={
-                "programs": ui_programs,
-                "phases": phases,
-                "checklist": checklist,   # ✅ NEW
-                "analysis": analysis
+                message=full_md,
+                data={
+                    "programs": ui_programs,
+                    "analysis": analysis,
+                    "timeline_events": timeline_events,
+                    "projects": projects,
+                    "md": full_md,
                 },
             )
 
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Roadmap generate error: {e}")
             return ServiceResult.failure(str(e))
 
     def _program_to_payload(self, prog: Program, score: float, bd: Dict[str, Any]) -> Dict[str, Any]:
-        def _to_py_number(x):
-            try:
-                # handles numpy scalars too because they support float()
-                return float(x)
-            except Exception:
-                return x
-
         def g(obj, attr: str, default=None):
             if isinstance(obj, dict):
                 return obj.get(attr, default)
@@ -236,221 +273,193 @@ class RoadmapService:
         except Exception:
             match_percent = 0
 
-        payload = {
+        prereq_raw = g(prog, "prerequisites", "") or ""
+        admission_raw = g(prog, "admission_average", "") or ""
+
+        missing = bd.get("missing_prereqs", []) if isinstance(bd, dict) else []
+        missing = [str(x).strip() for x in (missing or []) if str(x).strip()]
+
+        return {
             "program_name": g(prog, "program_name", "") or "",
             "university_name": g(prog, "university_name", "") or g(prog, "university", "") or "",
             "program_url": g(prog, "program_url", "") or g(prog, "url", "") or "",
-            "admission_average": g(prog, "admission_average", "") or "",
-            "prerequisites": g(prog, "prerequisites", "") or "",
+            "admission_average": str(admission_raw).strip(),
+            "prerequisites": _clean_prereq_display(str(prereq_raw)),
             "co_op_available": bool(g(prog, "co_op_available", False) or g(prog, "coop_available", False)),
             "match_percent": match_percent,
-            "missing_prereqs": bd.get("missing_prereqs", []) if isinstance(bd, dict) else [],
+            "missing_prereqs": missing,
             "grade_assessment": bd.get("grade_assessment") if isinstance(bd, dict) else None,
-            "metrics": {
-                "final": _to_py_number(bd.get("final")) if isinstance(bd, dict) else None,
-                "relevance": _to_py_number(bd.get("relevance")) if isinstance(bd, dict) else None,
-                "grade": _to_py_number(bd.get("grade")) if isinstance(bd, dict) else None,
-                "prereq": _to_py_number(bd.get("prereq")) if isinstance(bd, dict) else None,
-                "location": _to_py_number(bd.get("location")) if isinstance(bd, dict) else None,
-            },
         }
-        return payload
 
-    def _build_phases(self, profile: StudentProfile, ui_programs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        missing = []
-        for p in ui_programs:
-            for m in (p.get("missing_prereqs") or []):
-                m = str(m).strip()
-                if m and m not in missing:
-                    missing.append(m)
+    def _build_timeline(self, profile: StudentProfile) -> List[Dict[str, Any]]:
+        """
+        Timeline = date-based milestones (unique vs checklist).
+        Anchors to OUAC equal consideration deadline (Jan 15).
+        """
+        today = date.today()
+        deadline = _parse_ouac_deadline()
 
-        phases: List[Dict[str, Any]] = []
-
-        if missing:
-            phases.append({
-                "title": "This month (prerequisites)",
-                "items": [f"Register/complete {m}" for m in missing[:6]] + [
-                    "Double-check that your top 6 U/M courses match program prerequisites",
-                    "Open each program link and confirm the latest requirements",
-                ]
-            })
-        else:
-            phases.append({
-                "title": "This month (confirm requirements)",
+        # simple milestone spacing
+        days_left = max(0, (deadline - today).days)
+        return [
+            {
+                "date": _iso(today),
+                "title": "Today",
                 "items": [
-                    "Open your top program links and confirm prerequisites + admission requirements",
-                    "Ensure your current course plan covers all required Grade 12 U/M courses",
-                ]
+                    "Confirm your top 6 Grade 12 U/M courses",
+                    "Pick 6–10 programs (mix of safe/target/reach)",
+                ],
+            },
+            {
+                "date": _iso(min(deadline, today.replace(day=min(today.day + 7, 28)))),
+                "title": "Within 7 days",
+                "items": [
+                    "Draft your shortlist and save each program link",
+                    "Start a small portfolio/project log (Google Doc or Notion)",
+                ],
+            },
+            {
+                "date": _iso(deadline),
+                "title": "OUAC Equal Consideration Deadline (Jan 15)",
+                "items": [
+                    "Submit applications for equal consideration",
+                    "Double-check supplementary requirements (if any) per school/program",
+                ],
+                "meta": {"days_left": days_left},
+            },
+        ]
+
+    def _build_projects(self, profile: StudentProfile) -> List[Dict[str, Any]]:
+        """
+        Checklist = supplementary boosters (unique vs timeline).
+        """
+        interest = (profile.interests or "").lower()
+
+        projects = []
+
+        # Robotics / engineering flavored defaults
+        if "robot" in interest or "mechat" in interest or "engineering" in interest:
+            projects.append({
+                "title": "Robotics Portfolio Project (2–3 weeks)",
+                "items": [
+                    "Build one small robotics project (Arduino / Raspberry Pi / simulation)",
+                    "Write a 1-page project summary (goal, design, results, what you learned)",
+                    "Add photos/video + GitHub link (if coding)",
+                ],
+            })
+            projects.append({
+                "title": "Competition / Club Impact (ongoing)",
+                "items": [
+                    "Join (or lead) a robotics/engineering club and take ownership of one subsystem",
+                    "Log measurable impact: prototypes built, tests run, features shipped",
+                    "Ask a mentor/teacher for a short reference note about your role",
+                ],
+            })
+        else:
+            projects.append({
+                "title": "Interest Portfolio (2–3 weeks)",
+                "items": [
+                    "Create one tangible artifact: mini-research brief, app, case study, or design",
+                    "Document process + reflection (what changed after feedback)",
+                    "Publish it somewhere linkable (Drive/Notion/GitHub)",
+                ],
             })
 
-        phases.append({
-            "title": "Next 2–4 weeks (shortlist)",
+        projects.append({
+            "title": "Supplementary Application Pack",
             "items": [
-                "Shortlist 6–10 programs (mix of safe/target/reach)",
-                "Compare prerequisites side-by-side and remove any that don’t match your courses",
-                "Keep a tracker: program, prerequisites, admission notes, link",
-            ]
+                "Prepare a master activities list (role, dates, impact, links)",
+                "Draft 3–5 story bullets (challenge → action → result → lesson)",
+                "Collect 2 references who can speak to your work ethic and growth",
+            ],
         })
 
-        phases.append({
-            "title": "Before applications (readiness)",
-            "items": [
-                "Create a deadline list (OUAC / university-specific items if applicable)",
-                "Prepare what you’ll need: grades, activities list, any supplementary forms",
-                "Re-check each program page for updates close to application time",
-            ]
-        })
+        return projects[:6]
 
-        return phases[:6]
-
-    def _norm_key(self, s: str) -> str:
-        return " ".join(str(s or "").lower().split())
-
-    def _build_checklist(
+    def _format_full_plan_ai(
         self,
         profile: StudentProfile,
         ui_programs: List[Dict[str, Any]],
-        phases: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """
-        Checklist should be different from Timeline:
-        - Timeline = big milestones (phases)
-        - Checklist = concrete, atomic tasks students can check off
-        """
-        # Avoid repeating phase items in checklist
-        phase_items = set()
-        for ph in (phases or []):
-            for it in (ph.get("items") or []):
-                phase_items.add(self._norm_key(it))
-    
-        seen = set()
-        def add(items: List[str], text: str):
-            k = self._norm_key(text)
-            if not k or k in seen or k in phase_items:
-                return
-            seen.add(k)
-            items.append(text)
-    
-        # Gather missing prereqs from programs
-        missing = []
-        for p in (ui_programs or []):
-            for m in (p.get("missing_prereqs") or []):
-                m = str(m).strip()
-                if m and m not in missing:
-                    missing.append(m)
-    
-        sections: List[Dict[str, Any]] = []
-    
-        # Section 1: Prereqs + grades (atomic)
-        prereq_items: List[str] = []
-        if missing:
-            add(prereq_items, f"Book a guidance counsellor meeting to add: {', '.join(missing[:3])}")
-            add(prereq_items, "If timetable is full, enroll in night school / eLearning for missing courses")
-            add(prereq_items, "Calculate your top-6 U/M average (include prerequisites)")
-        else:
-            add(prereq_items, "Confirm your top-6 U/M courses match prerequisites for your top programs")
-            add(prereq_items, "Calculate your top-6 U/M average and set a target for each program tier")
-    
-        add(prereq_items, "Set a weekly grade target for each core course (Math/Science/English)")
-        if prereq_items:
-            sections.append({"title": "Prerequisites & Grades", "items": prereq_items[:8]})
-    
-        # Section 2: Program research (not the same as timeline)
-        research_items: List[str] = []
-        add(research_items, "Open 3 program links and write 1–2 notes each (why it fits / what you like)")
-        add(research_items, "Create a simple tracker: Program | Prereqs | Avg | Co-op | Notes | Link")
-        add(research_items, "Pick 2 ‘reach’, 4 ‘target’, 2 ‘safe’ programs (balance your list)")
-        if research_items:
-            sections.append({"title": "Program Shortlist & Research", "items": research_items[:8]})
-    
-        # Section 3: Profile building (ECs/portfolio)
-        profile_items: List[str] = []
-        add(profile_items, "Start one small project related to your interest (document with photos/screenshots)")
-        add(profile_items, "Join 1 relevant club/team or volunteer role (even 1 hr/week is enough)")
-        add(profile_items, "Write a 5-bullet ‘activity log’ (what you did, impact, skills learned)")
-        if profile_items:
-            sections.append({"title": "Extracurriculars & Portfolio", "items": profile_items[:8]})
-    
-        # Section 4: Applications readiness
-        app_items: List[str] = []
-        add(app_items, "Make a deadlines list (OUAC + supp apps + scholarships)")
-        add(app_items, "Prepare a ‘facts sheet’: grades, awards, activities, hours, leadership roles")
-        add(app_items, "Draft 5 short answers about you (challenge, teamwork, leadership, why program, why you)")
-        if app_items:
-            sections.append({"title": "Application Readiness", "items": app_items[:8]})
-    
-        return sections[:6]
-    
-    def _format_full_plan(
-        self,
-        profile: StudentProfile,
-        ui_programs: List[Dict[str, Any]],
-        analysis_md: str,
-        phases: List[Dict[str, Any]],
+        analysis: str,
+        timeline_events: List[Dict[str, Any]],
+        projects: List[Dict[str, Any]],
     ) -> str:
-        subj = ", ".join(profile.subjects[:5]) if profile.subjects else "Not specified"
+        """
+        Uses LLM to format ONLY. If no API, falls back to deterministic markdown.
+        """
+        payload = {
+            "profile": {
+                "interest": profile.interests,
+                "grade": profile.grade,
+                "average": profile.average,
+                "subjects": profile.subjects,
+                "location": profile.location,
+            },
+            "programs": ui_programs[:10],
+            "timeline_events": timeline_events,
+            "projects": projects,
+            "analysis": analysis,
+        }
 
-        lines: List[str] = []
-        lines.append("## ✨ Your Personalized University Roadmap")
-        lines.append("")
-        lines.append(f"**🎯 Interest:** {profile.interests}  ")
-        lines.append(f"**📊 Grade:** {profile.grade} | **Average:** {profile.average}%  ")
-        lines.append(f"**📚 Subjects:** {subj}")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-        lines.append("## Top Matching Programs")
-        lines.append("")
+        if not self.llm.has_api:
+            return self._format_full_plan_fallback(payload)
 
-        for i, p in enumerate(ui_programs[:10], 1):
-            name = p.get("program_name", "")
-            uni = p.get("university_name", "")
-            pct = p.get("match_percent", 0)
-            adm = p.get("admission_average") or "Check website"
-            pre = p.get("prerequisites") or "Check website"
-            miss = p.get("missing_prereqs") or []
-            url = p.get("program_url") or ""
-            coop = "✅ Co-op Available" if p.get("co_op_available") else ""
+        system = (
+            "You are formatting structured data into clean Markdown.\n"
+            "RULES:\n"
+            "- Do NOT add new facts.\n"
+            "- Do NOT invent deadlines beyond what is provided.\n"
+            "- Keep prerequisites short (use given text).\n"
+            "- Output ONLY Markdown.\n"
+        )
+        prompt = (
+            "Format this into a polished student-friendly plan with these sections:\n"
+            "1) Profile\n"
+            "2) Top Programs (table)\n"
+            "3) Timeline (dated bullets)\n"
+            "4) Checklist Projects (checkbox style)\n"
+            "5) Personalized Analysis (lightly cleaned)\n\n"
+            f"DATA:\n{payload}"
+        )
+        out = (self.llm.generate(prompt, system) or "").strip()
+        return out or self._format_full_plan_fallback(payload)
 
-            lines.append(f"### {i}. {name}")
-            lines.append(f"**{uni}** | 🌟 Match ({pct}%)  ")
-            lines.append(f"**Admission (db):** {adm}  ")
-            lines.append(f"**Prerequisites (db):** {pre}  ")
-            if miss:
-                lines.append(f"> ⚠️ **Missing:** {', '.join(miss[:8])}")
-            if coop:
-                lines.append(coop)
-            if url:
-                lines.append(f"[View Program Details]({url})")
-            lines.append("")
-            lines.append("---")
-            lines.append("")
+    def _format_full_plan_fallback(self, payload: Dict[str, Any]) -> str:
+        p = payload["profile"]
+        lines = []
+        lines.append("## ✨ Your Personalized University Roadmap\n")
+        lines.append(f"**🎯 Interest:** {p.get('interest','')}  ")
+        lines.append(f"**📊 Grade:** {p.get('grade','')} | **Average:** {p.get('average','')}%  ")
+        subj = ", ".join((p.get("subjects") or [])[:6]) or "Not specified"
+        lines.append(f"**📚 Subjects:** {subj}\n")
+        lines.append("---\n")
 
-        lines.append("## Personalized Analysis")
-        lines.append("")
-        lines.append(analysis_md.strip() if analysis_md else "- No analysis returned.")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-        lines.append("## Actionable Next Steps")
-        lines.append("")
-        for ph in phases[:6]:
-            title = ph.get("title", "")
-            items = ph.get("items", []) or []
-            lines.append(f"**{title}:**")
-            for it in items[:10]:
+        lines.append("## Top Matching Programs\n")
+        lines.append("| # | Program | University | Match | Co-op | Prereqs (db) |")
+        lines.append("|---:|---|---|---:|:---:|---|")
+        for i, pr in enumerate(payload["programs"], 1):
+            lines.append(
+                f"| {i} | {pr.get('program_name','')} | {pr.get('university_name','')} | {pr.get('match_percent',0)}% | "
+                f\"{'✅' if pr.get('co_op_available') else '—'}\" + f" | {pr.get('prerequisites','')} |"
+            )
+        lines.append("\n---\n")
+
+        lines.append("## Timeline\n")
+        for ev in payload["timeline_events"]:
+            lines.append(f"**{ev.get('date','')} — {ev.get('title','')}**")
+            for it in ev.get("items", [])[:8]:
                 lines.append(f"- {it}")
             lines.append("")
+        lines.append("---\n")
 
-        lines.append("---")
-        lines.append("**Tip:** Always verify prerequisites/admission details using the program link (requirements can change).")
+        lines.append("## Checklist Projects\n")
+        for ph in payload["projects"]:
+            lines.append(f"**{ph.get('title','')}**")
+            for it in ph.get("items", [])[:10]:
+                lines.append(f"- [ ] {it}")
+            lines.append("")
+        lines.append("---\n")
+
+        lines.append("## Personalized Analysis\n")
+        lines.append(payload.get("analysis") or "- No analysis returned.")
         return "\n".join(lines).strip()
-
-    def followup(self, question: str, session: Session) -> ServiceResult:
-        try:
-            context = session.last_profile.to_context_string() if session.last_profile else ""
-            prompt = self.prompts.followup_prompt(question, context)
-            response = self.llm.generate(prompt, self.prompts.followup_system_prompt())
-            return ServiceResult.success(message=response) if response else ServiceResult.failure("No response")
-        except Exception as e:
-            return ServiceResult.failure(str(e))
