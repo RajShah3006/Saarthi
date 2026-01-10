@@ -1,12 +1,13 @@
-# app.py# app.py
+# app.py
 import gradio as gr
 import logging
 import sys
 import re
+import inspect
 from typing import Any, Dict, Tuple, List
 from datetime import date, timedelta
-from services.github_issues import GitHubIssuesClient
 
+from services.github_issues import GitHubIssuesClient
 from config import Config
 from controllers import Controllers
 from ui.layout import create_ui_layout
@@ -24,10 +25,10 @@ logging.basicConfig(
 logger = logging.getLogger("saarthi")
 
 store = SubmissionStore()
+gh = GitHubIssuesClient()
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-gh = GitHubIssuesClient()
 
 def create_app() -> gr.Blocks:
     config = Config()
@@ -55,7 +56,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     login = components["login"]
     student = components["student"]
 
-    # ---------- helpers ----------
+    # ---------------- helpers ----------------
     def safe_plan_dict(plan: Any) -> Dict[str, Any]:
         if isinstance(plan, dict):
             return plan
@@ -71,6 +72,9 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         except Exception:
             return (0, "")
 
+    def valid_email(email: str) -> bool:
+        return bool(EMAIL_RE.match((email or "").strip()))
+
     def ouac_deadline() -> date:
         today = date.today()
         dl = date(today.year, 1, 15)
@@ -84,20 +88,22 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         days_left = max(0, (dl - today).days)
         wk1 = today + timedelta(days=7)
         wk3 = today + timedelta(days=21)
+
+        # NOTE: renderer may not display "date", so we bake it into title too.
         return [
-            {"date": today.isoformat(), "title": "Start here", "items": [
+            {"date": today.isoformat(), "title": f"{today.isoformat()} — Start here", "items": [
                 "Confirm your top 6 Grade 12 U/M courses + prerequisites",
                 "Pick 6–10 programs (safe / target / reach)",
             ]},
-            {"date": wk1.isoformat(), "title": "Within 7 days", "items": [
+            {"date": wk1.isoformat(), "title": f"{wk1.isoformat()} — Within 7 days", "items": [
                 "Save links + requirements for each shortlisted program",
                 "Start a simple tracker (program, prereqs, admission notes, link)",
             ]},
-            {"date": wk3.isoformat(), "title": "Within 3 weeks", "items": [
+            {"date": wk3.isoformat(), "title": f"{wk3.isoformat()} — Within 3 weeks", "items": [
                 "Build 1 supplementary portfolio piece (project write-up / GitHub / design)",
                 "Draft your activities list (role, dates, impact, proof)",
             ]},
-            {"date": dl.isoformat(), "title": f"OUAC equal consideration target (Jan 15) — {days_left} days left", "items": [
+            {"date": dl.isoformat(), "title": f"{dl.isoformat()} — OUAC equal consideration (Jan 15) • {days_left} days left", "items": [
                 "Submit for equal consideration",
                 "Double-check supplementary requirements per program",
             ]},
@@ -109,9 +115,9 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         if not tags and not d:
             return ""
         base = ", ".join(tags[:4]) if tags else "your interests"
-        lines = [f"**Hint:** Based on {base}, Saarthi will prioritize programs most aligned with your pathway."]
+        lines = [f"**Hint:** Based on {base}, Saarthi will prioritize programs aligned with your pathway."]
         if "robot" in d or "mechat" in d or "engineering" in " ".join([t.lower() for t in tags]):
-            lines.append("- Consider highlighting a robotics/mechatronics portfolio project (1–2 weeks) for supplementary strength.")
+            lines.append("- Consider a robotics/mechatronics portfolio project (1–2 weeks) to strengthen supplementary apps.")
         if "computer" in " ".join([t.lower() for t in tags]) or "cs" in d:
             lines.append("- A small GitHub project + short write-up is a big differentiator.")
         return "\n".join(lines)
@@ -121,7 +127,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         s = " ".join(subjects).lower()
         t = " ".join(tags or []).lower()
         missing = []
-        # lightweight heuristic for common Ontario eng/cs prereqs
         if ("engineering" in t) or ("computer science" in t) or ("math" in t):
             if "english (eng4u)" not in s:
                 missing.append("English (ENG4U)")
@@ -133,11 +138,8 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             if "physics (sph4u)" not in s:
                 missing.append("Physics (SPH4U)")
         if missing:
-            return "⚠️ **Possible missing prereqs (based on common requirements):** " + ", ".join(missing[:6])
+            return "⚠️ **Possible missing prereqs (common requirements):** " + ", ".join(missing[:6])
         return "✅ Looks good — your subjects appear aligned with common prerequisites."
-
-    def valid_email(email: str) -> bool:
-        return bool(EMAIL_RE.match((email or "").strip()))
 
     def build_review(grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences):
         tags_str = ", ".join(tags or []) or "—"
@@ -171,7 +173,54 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             gr.update(interactive=(step == 4)),
         )
 
-    # ---------- student UX: show/hide email textbox ----------
+    def save_generated_plan_compat(submission_id: int, full_md: str, programs: list, timeline_events: list, projects: list):
+        """
+        Backward compatible wrapper for SubmissionStore.save_generated_plan
+        because your store signature may differ across versions.
+        """
+        try:
+            sig = inspect.signature(store.save_generated_plan)
+            # parameters include "self"
+            n = len(sig.parameters)
+            if n >= 6:
+                # self, id, md, programs, timeline, projects
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], timeline_events or [], projects or [])
+            else:
+                # self, id, md, programs, phases
+                # reuse phases column for projects
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], projects or [])
+        except Exception:
+            # last resort attempts
+            try:
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], timeline_events or [], projects or [])
+            except Exception:
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], projects or [])
+
+    def sync_github_status(submission_id: int, desired_label: str, close: bool = False):
+        try:
+            sub = store.admin_get(int(submission_id))
+            if not sub or not sub.get("github_issue_number"):
+                return
+            issue_no = int(sub["github_issue_number"])
+            ok = gh.set_issue_status(issue_no, desired_label, close=close)
+            if ok:
+                try:
+                    store.set_github_status(int(submission_id), desired_label)
+                except Exception:
+                    pass
+            else:
+                try:
+                    store.set_github_status(int(submission_id), "status:ERROR")
+                except Exception:
+                    pass
+                try:
+                    gh.comment(issue_no, f"⚠️ Saarthi failed to set label `{desired_label}` automatically. Check server logs.")
+                except Exception:
+                    pass
+        except Exception:
+            logger.exception("sync_github_status failed")
+
+    # ---------------- student UX: show/hide email textbox ----------------
     def on_email_toggle(wants: bool):
         if wants:
             return gr.update(visible=True), gr.update(value="📩 You’ll receive an email after team approval.")
@@ -183,7 +232,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         outputs=[student["student_email"], student["email_hint"]],
     )
 
-    # ---------- hints ----------
+    # ---------------- hints ----------------
     def on_interest_change(tags, details):
         return gr.update(value=build_interest_hint(tags or [], details or ""))
 
@@ -207,7 +256,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         outputs=[student["prereq_hint"]],
     )
 
-    # ---------- login ----------
+    # ---------------- login ----------------
     def on_start(name: str):
         hide_login, show_student, welcome_md, sess_id = controllers.handle_start_session(name)
         return (
@@ -238,31 +287,16 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------- resume from login ----------
+    # ---------------- resume: chain properly (NO double click) ----------------
     def on_resume_from_login(code: str):
         sid, token = parse_resume_code(code)
         if not sid or not token:
             return gr.update(value="❌ Invalid code. Use `id:token`"), gr.update(), gr.update()
-
         sub = store.get_by_resume_code(sid, token)
         if not sub:
             return gr.update(value="❌ Not found. Check the code again."), gr.update(), gr.update()
+        return (gr.update(value="✅ Loaded saved roadmap."), gr.update(visible=False), gr.update(visible=True))
 
-        sub_u = store.unpack(sub)
-        # show student + outputs
-        return (
-            gr.update(value="✅ Loaded saved roadmap."),
-            gr.update(visible=False),
-            gr.update(visible=True),
-        )
-
-    login["resume_btn"].click(
-        fn=on_resume_from_login,
-        inputs=[login["resume_code_input"]],
-        outputs=[login["resume_login_status"], login["section"], student["section"]],
-    )
-
-    # After resume, actually render outputs (separate click so you can keep it clean)
     def render_resumed(code: str):
         sid, token = parse_resume_code(code)
         sub = store.get_by_resume_code(sid, token)
@@ -273,11 +307,13 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 "inputs",
                 gr.update(value="❌ Not found."),
                 gr.update(value=""),
+                gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
+                gr.update(value="<div class='card-empty'>No programs yet.</div>"),
+                gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
                 gr.update(value=""),
-                gr.update(value=""),
                 gr.update(value=[]),
-                gr.update(value=[]),
-                gr.update(value=[]),
+                gr.update(choices=[], value=[]),
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
             )
 
         sub_u = store.unpack(sub)
@@ -287,34 +323,39 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "avg": sub_u.get("average", ""),
             "subjects": ", ".join((sub_u.get("subjects") or [])[:6]),
         }
+
         programs = sub_u.get("ui_programs", []) or []
         timeline_events = sub_u.get("ui_timeline", []) or build_fallback_timeline()
-        projects = sub_u.get("ui_projects", []) or []
+        projects = sub_u.get("ui_projects", []) or sub_u.get("ui_phases", []) or []
 
         timeline_html = render_timeline(profile, timeline_events)
         programs_html = render_program_cards(programs)
         checklist_html = render_checklist(projects)
         full_md = sub_u.get("roadmap_md", "") or ""
 
-        # compare choices
         choices = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
 
         return (
-            gr.update(visible=False),   # inputs_view
-            gr.update(visible=True),    # outputs_view
+            gr.update(visible=False),
+            gr.update(visible=True),
             "outputs",
             gr.update(value=f"**Resume code:** `{sid}:{token}`"),
-            gr.update(value=f"{sid}:{token}"),  # hidden store for localStorage
+            gr.update(value=f"{sid}:{token}"),
             timeline_html,
             programs_html,
             checklist_html,
             full_md,
-            gr.update(value=programs),  # programs_state
+            gr.update(value=programs),
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
 
-    login["resume_btn"].click(
+    resume_evt = login["resume_btn"].click(
+        fn=on_resume_from_login,
+        inputs=[login["resume_code_input"]],
+        outputs=[login["resume_login_status"], login["section"], student["section"]],
+    )
+    resume_evt.then(
         fn=render_resumed,
         inputs=[login["resume_code_input"]],
         outputs=[
@@ -333,26 +374,22 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------- wizard nav with validation ----------
+    # ---------------- wizard nav with validation ----------------
     def on_next(step, grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences):
         step = int(step)
 
-        # leaving step 1: validate interests + email if needed
         if step == 1:
             if not tags or len(tags) < 2:
                 return (*set_step(1), gr.update(value="❌ Please pick at least 2 Interest Areas."), gr.update())
             if wants_email and not valid_email(email):
                 return (*set_step(1), gr.update(value="❌ Please enter a valid email address."), gr.update())
-            # update review not yet
             return (*set_step(2), gr.update(value=""), gr.update())
 
-        # leaving step 2: validate subjects
         if step == 2:
             if not subjects or len(subjects) == 0:
                 return (*set_step(2), gr.update(value="❌ Please select your current/planned subjects."), gr.update())
             return (*set_step(3), gr.update(value=""), gr.update())
 
-        # leaving step 3 -> step 4: build review
         if step == 3:
             base = set_step(4)
             review = build_review(grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences)
@@ -403,7 +440,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------- generate ----------
+    # ---------------- generate ----------------
     def generate_and_show(
         grade, average, location,
         tags, details,
@@ -413,18 +450,16 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     ):
         tags = tags or []
         details = (details or "").strip()
-    
-        # ✅ Build interests string consistently
+
         if tags and details:
             interests_str = f"{', '.join(tags)}; Details: {details}"
         elif tags:
             interests_str = ", ".join(tags)
         else:
             interests_str = details
-    
-        # ✅ validate email if wants_email
+
+        # email validation
         if wants_email and not valid_email(student_email):
-            # Must return 15 outputs (match your outputs list)
             return (
                 gr.update(value="❌ Please enter a valid email."),
                 gr.update(value=""),
@@ -434,15 +469,15 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 "inputs",
                 gr.update(value="", visible=False),
                 gr.update(visible=True),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-                gr.update(),
+                gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
+                gr.update(value="<div class='card-empty'>No programs yet.</div>"),
+                gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
+                gr.update(value=""),
                 gr.update(value=[]),
                 gr.update(choices=[], value=[]),
                 gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
             )
-    
+
         created = store.create_submission({
             "student_name": student_name or "Student",
             "student_email": (student_email or "").strip(),
@@ -450,86 +485,86 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "grade": grade,
             "average": float(average),
             "subjects": subjects or [],
-            "interests": interests_str,  # ✅ store the combined string
+            "interests": interests_str,
             "extracurriculars": extracurriculars or "",
             "location": location or "",
             "preferences": preferences or "",
         })
-    
         resume_code = f"{created['id']}:{created['resume_token']}"
-    
-        # ✅ Create GitHub issue ONLY if wants_email (and fix NameError)
-        if wants_email:
-            try:
-                issue_no, issue_url, assignee = gh.create_email_request_issue(
-                    submission_id=created["id"],
-                    resume_code=resume_code,
-                    grade=str(grade),
-                    average=float(average),
-                    interests=interests_str,  # ✅ FIXED (was interests=str(interests))
-                )
-                if issue_no:
-                    store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
-            except Exception as e:
-                logger.exception("GitHub issue creation failed: %s", e)
-                # Optional: store github error status if you support it
-                try:
-                    store.set_github_status(int(created["id"]), "status:ERROR")
-                except Exception:
-                    pass
-    
-        # Generate roadmap (you already hide outputs if wants_email)
-        plan_raw = controllers.handle_generate_roadmap(
-            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
-        )
-        plan = safe_plan_dict(plan_raw)
-    
-        programs = plan.get("programs", []) or []
-        timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
-        projects = plan.get("projects", []) or []
-        full_md = plan.get("md", "") or ""
-    
-        profile = plan.get("profile") or {
-            "interest": interests_str,
-            "grade": grade,
-            "avg": average,
-            "subjects": ", ".join((subjects or [])[:6]),
-        }
-    
-        store.save_generated_plan(
-            created["id"], full_md, programs, timeline_events, projects, actor="student"
-        )
-    
         note = f"**Resume code:** `{resume_code}`"
-        choices = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
-    
-        # If email requested → do NOT show dashboard
+
+        # If email requested: create issue, DO NOT generate roadmap for student
         if wants_email:
+            if not gh.enabled:
+                logger.warning("GitHubIssuesClient not enabled — check GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO")
+            else:
+                try:
+                    issue_no, issue_url, assignee = gh.create_email_request_issue(
+                        submission_id=created["id"],
+                        resume_code=resume_code,
+                        grade=str(grade),
+                        average=float(average),
+                        interests=interests_str,
+                    )
+                    if issue_no:
+                        try:
+                            store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
+                        except Exception:
+                            pass
+                except Exception:
+                    logger.exception("GitHub issue creation failed")
+
             notice = (
                 "✅ **Request received!**  \n\n"
                 "A team member will review your personalized roadmap and email it to you shortly.  \n\n"
                 f"{note}"
             )
+
+            # Switch to outputs view but hide dashboard
             return (
                 gr.update(value=""),                    # wizard_error
                 gr.update(value=note),                  # submission_code_out
                 gr.update(value=resume_code),           # resume_code_store
                 gr.update(visible=False),               # inputs_view
                 gr.update(visible=True),                # outputs_view
-                "outputs",                              # view_state
+                "outputs",
                 gr.update(value=notice, visible=True),  # email_only_notice
                 gr.update(visible=False),               # dashboard_wrap
-                "", "", "", "",                         # timeline/programs/checklist/fullmd hidden
-                gr.update(value=programs),              # programs_state
-                gr.update(choices=choices, value=[]),
+                "<div class='card-empty'>Roadmap will be emailed.</div>",
+                "<div class='card-empty'>Roadmap will be emailed.</div>",
+                "<div class='card-empty'>Roadmap will be emailed.</div>",
+                "",                                     # full plan hidden
+                gr.update(value=[]),                    # programs_state
+                gr.update(choices=[], value=[]),
                 gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
             )
-    
-        # else show full dashboard
+
+        # Otherwise: generate immediately + show dashboard
+        plan_raw = controllers.handle_generate_roadmap(
+            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
+        )
+        plan = safe_plan_dict(plan_raw)
+
+        programs = plan.get("programs", []) or []
+        timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
+        projects = plan.get("projects", []) or []
+        full_md = plan.get("md", "") or ""
+
+        profile = plan.get("profile") or {
+            "interest": interests_str,
+            "grade": grade,
+            "avg": average,
+            "subjects": ", ".join((subjects or [])[:6]),
+        }
+
+        save_generated_plan_compat(created["id"], full_md, programs, timeline_events, projects)
+
         timeline_html = render_timeline(profile, timeline_events)
         programs_html = render_program_cards(programs)
         checklist_html = render_checklist(projects)
-    
+
+        choices = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
+
         return (
             gr.update(value=""),                 # wizard_error
             gr.update(value=note),               # submission_code_out
@@ -543,7 +578,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             programs_html,
             checklist_html,
             full_md,
-            gr.update(value=programs),
+            gr.update(value=programs),           # programs_state
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
@@ -583,7 +618,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # back to inputs
+    # ---------------- back to inputs ----------------
     def go_edit_inputs():
         return gr.update(visible=True), gr.update(visible=False), "inputs"
 
@@ -593,7 +628,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         outputs=[student["inputs_view"], student["outputs_view"], view_state],
     )
 
-    # clear form
+    # ---------------- clear form ----------------
     student["clear_btn"].click(
         fn=controllers.handle_clear_form,
         inputs=[],
@@ -609,11 +644,11 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------- compare tab ----------
+    # ---------------- compare tab ----------------
     def render_compare(selected: List[str], programs: List[Dict[str, Any]]):
         if not selected:
             return "<div class='card-empty'>Pick programs to compare.</div>"
-        # map labels to programs by index order
+
         labels = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
         pick = []
         for s in selected[:4]:
@@ -635,6 +670,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
               <td>{p.get('admission_average','')}</td>
             </tr>
             """)
+
         return f"""
         <div class="table-wrap">
           <table class="cmp">
@@ -652,7 +688,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         outputs=[student["compare_table"]],
     )
 
-    # ---------- follow-up ----------
+    # ---------------- follow-up ----------------
     def followup(question, current_md, sess_id):
         cleared_q, new_md = controllers.handle_followup(question, current_md, sess_id)
         return cleared_q, gr.update(), gr.update(), gr.update(), new_md
@@ -680,7 +716,9 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         ],
     )
 
-    # ---------- admin unlock ----------
+    # =========================
+    # ADMIN (approval workflow)
+    # =========================
     def admin_unlock(pin: str):
         expected = getattr(config, "ADMIN_PIN", "") or ""
         if not expected:
@@ -757,9 +795,37 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             return "", "", "❌ Not found.", []
 
         sub_u = store.unpack(sub)
+
+        # If roadmap not generated yet (email-request flow), generate now (admin-triggered)
+        if not (sub_u.get("roadmap_md") or "").strip():
+            try:
+                subjects = sub_u.get("subjects", []) or []
+                interests = sub_u.get("interests", "") or ""
+                extracurriculars = sub_u.get("extracurriculars", "") or ""
+                average = sub_u.get("average", 0) or 0
+                grade = sub_u.get("grade", "") or ""
+                location = sub_u.get("location", "") or ""
+                preferences = sub_u.get("preferences", "") or ""
+
+                plan_raw = controllers.handle_generate_roadmap(
+                    subjects, interests, extracurriculars, average, grade, location, preferences, ""
+                )
+                plan = safe_plan_dict(plan_raw)
+
+                programs = plan.get("programs", []) or []
+                timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
+                projects = plan.get("projects", []) or []
+                full_md = plan.get("md", "") or ""
+
+                save_generated_plan_compat(int(submission_id), full_md, programs, timeline_events, projects)
+                sub = store.admin_get(int(submission_id))
+                sub_u = store.unpack(sub) if sub else sub_u
+                sync_github_status(int(submission_id), "status:GENERATED", close=False)
+            except Exception:
+                logger.exception("Admin-triggered roadmap generation failed")
+
         email = build_email_from_submission(sub_u)
 
-        # Add token in subject for tracking
         token = f"SRT-{sub_u.get('id')}"
         subject = (email.get("subject") or "Your Saarthi Roadmap").strip()
         if token not in subject:
@@ -769,16 +835,9 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         actor = (admin_name or "").strip() or "admin"
 
         store.admin_save_email(int(submission_id), subject, body, actor=actor)
-        sub = store.admin_get(int(submission_id))
-        if sub and sub.get("github_issue_number"):
-            try:
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)  # or SENT
-                store.set_github_status(int(submission_id), "status:DRAFTED")                        # or SENT
-            except Exception as e:
-                logger.exception("GitHub status update failed: %s", e)
-                store.set_github_status(int(submission_id), "status:ERROR")
-
+        sync_github_status(int(submission_id), "status:DRAFTED", close=False)
         store.log_action(int(submission_id), actor, "AUTOFILL_EMAIL", "Generated email draft")
+
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
         return subject, body, "✅ Auto-filled + saved.", actions_table
@@ -792,14 +851,8 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     def admin_save(submission_id: float, subject: str, body: str, admin_name: str):
         actor = (admin_name or "").strip() or "admin"
         store.admin_save_email(int(submission_id), subject or "", body or "", actor=actor)
-        sub = store.admin_get(int(submission_id))
-        if sub and sub.get("github_issue_number"):
-            try:
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:DRAFTED", close=False)  # or SENT
-                store.set_github_status(int(submission_id), "status:DRAFTED")                        # or SENT
-            except Exception as e:
-                logger.exception("GitHub status update failed: %s", e)
-                store.set_github_status(int(submission_id), "status:ERROR")
+        sync_github_status(int(submission_id), "status:DRAFTED", close=False)
+        store.log_action(int(submission_id), actor, "SAVE_EMAIL", "Saved email draft edits")
 
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
@@ -814,14 +867,8 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     def admin_mark_sent(submission_id: float, admin_name: str):
         actor = (admin_name or "").strip() or "admin"
         store.admin_mark_sent(int(submission_id), actor=actor)
-        sub = store.admin_get(int(submission_id))
-        if sub and sub.get("github_issue_number"):
-            try:
-                gh.set_issue_status(int(sub["github_issue_number"]), "status:SENT", close=True)  # or SENT
-                store.set_github_status(int(submission_id), "status:SENT")                        # or SENT
-            except Exception as e:
-                logger.exception("GitHub status update failed: %s", e)
-                store.set_github_status(int(submission_id), "status:ERROR")
+        sync_github_status(int(submission_id), "status:SENT", close=True)
+        store.log_action(int(submission_id), actor, "MARK_SENT", "Marked as sent")
 
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
@@ -832,6 +879,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         inputs=[student["review_id"], student["admin_name"]],
         outputs=[student["admin_status"], student["actions_table"]],
     )
+
 
 if __name__ == "__main__":
     app = create_app()
