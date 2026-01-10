@@ -453,6 +453,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     )
 
     # ---------------- generate ----------------
+    '''
     def generate_and_show(
         grade, average, location,
         tags, details,
@@ -652,7 +653,177 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             student["compare_table"],
         ],
     )
-
+'''
+    def generate_and_show(
+        grade, average, location,
+        tags, details,
+        subjects, extracurriculars, preferences,
+        wants_email, student_email,
+        sess_id, student_name
+    ):
+        tags = tags or []
+        details = (details or "").strip()
+    
+        if tags and details:
+            interests_str = f"{', '.join(tags)}; Details: {details}"
+        elif tags:
+            interests_str = ", ".join(tags)
+        else:
+            interests_str = details
+    
+        # email validation
+        if wants_email and not valid_email(student_email):
+            return (
+                gr.update(value="❌ Please enter a valid email."),
+                gr.update(value=""),
+                gr.update(value=""),
+                gr.update(visible=True),
+                gr.update(visible=False),
+                "inputs",
+                gr.update(value="", visible=False),
+                gr.update(visible=True),
+                gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
+                gr.update(value="<div class='card-empty'>No programs yet.</div>"),
+                gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
+                gr.update(value=""),
+                gr.update(value=[]),
+                gr.update(choices=[], value=[]),
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+            )
+    
+        created = store.create_submission({
+            "student_name": student_name or "Student",
+            "student_email": (student_email or "").strip(),
+            "wants_email": bool(wants_email),
+            "grade": grade,
+            "average": float(average),
+            "subjects": subjects or [],
+            "interests": interests_str,
+            "extracurriculars": extracurriculars or "",
+            "location": location or "",
+            "preferences": preferences or "",
+        })
+        resume_code = f"{created['id']}:{created['resume_token']}"
+        note = f"**Resume code:** `{resume_code}`"
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # ✅ ALWAYS generate and save roadmap (even if wants_email is True)
+        # ═══════════════════════════════════════════════════════════════════
+        plan_raw = controllers.handle_generate_roadmap(
+            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
+        )
+        plan = safe_plan_dict(plan_raw)
+    
+        programs = plan.get("programs", []) or []
+        timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
+        projects = plan.get("projects", []) or []
+        full_md = plan.get("md", "") or ""
+    
+        profile = plan.get("profile") or {
+            "interest": interests_str,
+            "grade": grade,
+            "avg": average,
+            "subjects": ", ".join((subjects or [])[:6]),
+        }
+    
+        # ✅ Save generated plan to database (always)
+        save_generated_plan_compat(created["id"], full_md, programs, timeline_events, projects)
+    
+        choices = [
+            f"{p.get('program_name', '')} — {p.get('university_name', '')}".strip(" —")
+            for p in programs[:12]
+        ]
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # If email requested: create GitHub issue, show notice (NOT dashboard)
+        # ═══════════════════════════════════════════════════════════════════
+        if wants_email:
+            github_status_msg = ""
+            
+            if not gh.enabled:
+                github_status_msg = "⚠️ GitHub integration not configured. Admin will need to check manually."
+                logger.warning("GitHubIssuesClient not enabled — check GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO")
+            else:
+                result = gh.create_email_request_issue(
+                    submission_id=created["id"],
+                    resume_code=resume_code,
+                    grade=str(grade),
+                    average=float(average),
+                    interests=interests_str,
+                )
+                
+                if result.success:
+                    try:
+                        store.set_github_issue(
+                            created["id"],
+                            result.issue_number,
+                            result.issue_url or "",
+                            result.assignee or "",
+                            "status:NEW"
+                        )
+                        github_status_msg = f"✅ Tracking issue created: [#{result.issue_number}]({result.issue_url})"
+                    except Exception as e:
+                        logger.exception(f"Failed to save GitHub issue reference: {e}")
+                        github_status_msg = f"✅ Issue #{result.issue_number} created, but failed to save reference."
+                else:
+                    github_status_msg = f"⚠️ Could not create tracking issue: {result.error_message}"
+                    logger.error(f"GitHub issue creation failed: {result.error_type} - {result.error_message}")
+                    
+                    try:
+                        store.set_github_status(created["id"], f"ERROR: {result.error_message[:100]}")
+                    except Exception:
+                        pass
+        
+            notice = (
+                "✅ **Request received!**\n\n"
+                "A team member will review your personalized roadmap and email it to you shortly.\n\n"
+                f"{note}\n\n"
+                f"_{github_status_msg}_"
+            )
+        
+            # Show notice, hide dashboard (but roadmap IS saved in DB for admin)
+            return (
+                gr.update(value=""),                    # wizard_error
+                gr.update(value=note),                  # submission_code_out
+                gr.update(value=resume_code),           # resume_code_store
+                gr.update(visible=False),               # inputs_view
+                gr.update(visible=True),                # outputs_view
+                "outputs",                              # view_state
+                gr.update(value=notice, visible=True),  # email_only_notice
+                gr.update(visible=False),               # dashboard_wrap
+                "",                                     # timeline_display (hidden)
+                "",                                     # programs_display (hidden)
+                "",                                     # checklist_display (hidden)
+                "",                                     # output_display (hidden)
+                gr.update(value=programs),              # programs_state (still store for later)
+                gr.update(choices=choices, value=[]),   # compare_select
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+            )
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # Otherwise: show full dashboard immediately
+        # ═══════════════════════════════════════════════════════════════════
+        timeline_html = render_timeline(profile, timeline_events)
+        programs_html = render_program_cards(programs)
+        checklist_html = render_checklist(projects)
+    
+        return (
+            gr.update(value=""),                 # wizard_error
+            gr.update(value=note),               # submission_code_out
+            gr.update(value=resume_code),        # resume_code_store
+            gr.update(visible=False),            # inputs_view
+            gr.update(visible=True),             # outputs_view
+            "outputs",                           # view_state
+            gr.update(value="", visible=False),  # email_only_notice
+            gr.update(visible=True),             # dashboard_wrap
+            timeline_html,                       # timeline_display
+            programs_html,                       # programs_display
+            checklist_html,                      # checklist_display
+            full_md,                             # output_display
+            gr.update(value=programs),           # programs_state
+            gr.update(choices=choices, value=[]),
+            gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+        )
     # ---------------- back to inputs ----------------
     def go_edit_inputs():
         return gr.update(visible=True), gr.update(visible=False), "inputs"
@@ -812,7 +983,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}"
                 f"?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>Open email draft in mail client</a>"
             )
-        logger.info(f"ADMIN LOAD id={submission_id} md_len={len((sub_u.get('roadmap_md') or '').strip())}")
 
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
