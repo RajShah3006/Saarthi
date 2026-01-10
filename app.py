@@ -197,28 +197,40 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 store.save_generated_plan(int(submission_id), full_md or "", programs or [], projects or [])
 
     def sync_github_status(submission_id: int, desired_label: str, close: bool = False):
+        """Sync submission status to GitHub issue labels"""
         try:
             sub = store.admin_get(int(submission_id))
-            if not sub or not sub.get("github_issue_number"):
+            if not sub:
+                logger.warning(f"sync_github_status: submission {submission_id} not found")
                 return
-            issue_no = int(sub["github_issue_number"])
-            ok = gh.set_issue_status(issue_no, desired_label, close=close)
-            if ok:
+                
+            issue_no = sub.get("github_issue_number")
+            if not issue_no:
+                logger.debug(f"sync_github_status: submission {submission_id} has no GitHub issue")
+                return
+                
+            result = gh.set_issue_status(int(issue_no), desired_label, close=close)
+            
+            if result.success:
                 try:
                     store.set_github_status(int(submission_id), desired_label)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to update local github_status: {e}")
             else:
+                logger.error(f"Failed to sync GitHub status: {result.error_message}")
                 try:
-                    store.set_github_status(int(submission_id), "status:ERROR")
+                    store.set_github_status(int(submission_id), f"ERROR: {result.error_message[:50]}")
                 except Exception:
                     pass
+                
+                # Add comment about the failure
                 try:
-                    gh.comment(issue_no, f"⚠️ Saarthi failed to set label `{desired_label}` automatically. Check server logs.")
+                    gh.comment(int(issue_no), f"⚠️ Saarthi failed to set label `{desired_label}`: {result.error_message}")
                 except Exception:
                     pass
-        except Exception:
-            logger.exception("sync_github_status failed")
+                    
+        except Exception as e:
+            logger.exception(f"sync_github_status failed: {e}")
 
     # ---------------- student UX: show/hide email textbox ----------------
     def on_email_toggle(wants: bool):
@@ -493,33 +505,56 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         resume_code = f"{created['id']}:{created['resume_token']}"
         note = f"**Resume code:** `{resume_code}`"
 
+        # In generate_and_show function, after creating submission:
+        
         # If email requested: create issue, DO NOT generate roadmap for student
         if wants_email:
+            github_status_msg = ""
+            github_error = False
+            
             if not gh.enabled:
+                github_status_msg = "⚠️ GitHub integration not configured. Admin will need to check manually."
                 logger.warning("GitHubIssuesClient not enabled — check GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO")
             else:
-                try:
-                    issue_no, issue_url, assignee = gh.create_email_request_issue(
-                        submission_id=created["id"],
-                        resume_code=resume_code,
-                        grade=str(grade),
-                        average=float(average),
-                        interests=interests_str,
-                    )
-                    if issue_no:
-                        try:
-                            store.set_github_issue(created["id"], issue_no, issue_url or "", assignee or "", "status:NEW")
-                        except Exception:
-                            pass
-                except Exception:
-                    logger.exception("GitHub issue creation failed")
-
+                result = gh.create_email_request_issue(
+                    submission_id=created["id"],
+                    resume_code=resume_code,
+                    grade=str(grade),
+                    average=float(average),
+                    interests=interests_str,
+                )
+                
+                if result.success:
+                    try:
+                        store.set_github_issue(
+                            created["id"],
+                            result.issue_number,
+                            result.issue_url or "",
+                            result.assignee or "",
+                            "status:NEW"
+                        )
+                        github_status_msg = f"✅ Tracking issue created: [#{result.issue_number}]({result.issue_url})"
+                    except Exception as e:
+                        logger.exception(f"Failed to save GitHub issue reference: {e}")
+                        github_status_msg = f"✅ Issue #{result.issue_number} created, but failed to save reference."
+                else:
+                    github_error = True
+                    github_status_msg = f"⚠️ Could not create tracking issue: {result.error_message}"
+                    logger.error(f"GitHub issue creation failed: {result.error_type} - {result.error_message}")
+                    
+                    # Try to log the error in the database
+                    try:
+                        store.set_github_status(created["id"], f"ERROR: {result.error_message[:100]}")
+                    except Exception:
+                        pass
+        
             notice = (
-                "✅ **Request received!**  \n\n"
-                "A team member will review your personalized roadmap and email it to you shortly.  \n\n"
-                f"{note}"
+                "✅ **Request received!**\n\n"
+                "A team member will review your personalized roadmap and email it to you shortly.\n\n"
+                f"{note}\n\n"
+                f"_{github_status_msg}_"
             )
-
+        
             # Switch to outputs view but hide dashboard
             return (
                 gr.update(value=""),                    # wizard_error
@@ -880,6 +915,59 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         outputs=[student["admin_status"], student["actions_table"]],
     )
 
+    def run_github_diagnostics():
+        from services.github_issues import diagnose_github_config
+        return gr.update(value=diagnose_github_config())
+    
+    student["github_diag_btn"].click(
+        fn=run_github_diagnostics,
+        inputs=[],
+        outputs=[student["github_diag_output"]],
+    )
+
+    # Startup diagnostics
+    def run_startup_checks():
+        """Run diagnostics on startup"""
+        logger.info("=" * 60)
+        logger.info("SAARTHI AI — STARTUP DIAGNOSTICS")
+        logger.info("=" * 60)
+        
+        # Check Gemini API
+        if config.GEMINI_API_KEY:
+            logger.info("✅ Gemini API: Configured")
+        else:
+            logger.warning("⚠️ Gemini API: Not configured (will use demo mode)")
+        
+        # Check GitHub
+        if gh.enabled:
+            result = gh.test_connection()
+            if result.success:
+                logger.info(f"✅ GitHub API: Connected to {gh.owner}/{gh.repo}")
+            else:
+                logger.error(f"❌ GitHub API: {result.error_message}")
+        else:
+            logger.warning("⚠️ GitHub API: Not configured (email workflow disabled)")
+        
+        # Check database
+        try:
+            count = len(store.list_queue(limit=1))
+            logger.info(f"✅ Database: Connected ({store.db_path})")
+        except Exception as e:
+            logger.error(f"❌ Database: {e}")
+        
+        # Check programs
+        try:
+            prog_count = controllers.program_search.program_count
+            has_embeddings = controllers.program_search.has_embeddings
+            logger.info(f"✅ Programs: {prog_count} loaded ({'with' if has_embeddings else 'without'} embeddings)")
+        except Exception as e:
+            logger.error(f"❌ Programs: {e}")
+        
+        logger.info("=" * 60)
+    
+    
+    # Run checks on module load
+    run_startup_checks()
 
 if __name__ == "__main__":
     app = create_app()

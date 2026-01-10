@@ -259,6 +259,10 @@ def create_ui_layout(config: Config) -> dict:
                     wrap=True,
                 )
 
+                gr.Markdown("### GitHub Diagnostics")
+                github_diag_btn = gr.Button("Run GitHub Diagnostics", elem_classes="secondary-btn")
+                github_diag_output = gr.Markdown("", elem_classes="output-box")
+
     return {
         "session_state": session_state,
         "name_state": name_state,
@@ -349,5 +353,7 @@ def create_ui_layout(config: Config) -> dict:
             "mark_sent_btn": mark_sent_btn,
             "gmail_helper": gmail_helper,
             "actions_table": actions_table,
+            "github_diag_btn": github_diag_btn,
+            "github_diag_output": github_diag_output,
         }
     }
