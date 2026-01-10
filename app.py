@@ -812,6 +812,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}"
                 f"?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>Open email draft in mail client</a>"
             )
+        logger.info(f"ADMIN LOAD id={submission_id} md_len={len((sub_u.get('roadmap_md') or '').strip())}")
 
         actions = store.get_actions(int(submission_id), limit=200)
         actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
