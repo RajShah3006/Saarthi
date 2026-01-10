@@ -38,13 +38,11 @@ class Program:
     
     def _extract_university_from_url(self, url: str) -> str:
         """Extract university name from ouinfo URL"""
-        # URL format: https://www.ouinfo.ca/programs/university-name/code
         try:
             if "ouinfo.ca/programs/" in url:
                 parts = url.split("/programs/")[1].split("/")
                 if parts:
                     uni_slug = parts[0]
-                    # Map common slugs to full names
                     uni_map = {
                         "algoma": "Algoma University",
                         "brock": "Brock University",
@@ -83,21 +81,16 @@ class Program:
             "university_name": self.university_name,
             "location": self.location,
             "co_op_available": self.co_op_available,
-            # Don't include embedding or search_text - too large
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Program":
         """Create Program from your JSON structure"""
-        # Extract embedding separately
         embedding = data.get("embedding", [])
-        
-        # Check for co-op in program name or prerequisites
         program_name = data.get("program_name", "")
         prereqs = data.get("prerequisites", "")
         has_coop = "co-op" in program_name.lower() or "coop" in program_name.lower()
         
-        # Create program
         program = cls(
             program_name=program_name,
             program_url=data.get("program_url", ""),
@@ -108,9 +101,7 @@ class Program:
             co_op_available=has_coop,
         )
         
-        # Set embedding after creation
         program.embedding = embedding if isinstance(embedding, list) else []
-        
         return program
 
 
@@ -124,7 +115,7 @@ class StudentProfile:
     subjects: List[str]
     extracurriculars: str
     location: str
-    preferences: str  # <-- replaced budget
+    preferences: str
 
     def to_context_string(self) -> str:
         """Format for prompt context"""
@@ -147,13 +138,17 @@ class Session:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Student"
     created_at: datetime = field(default_factory=datetime.now)
+    
+    # Profile from last generation
     last_profile: Optional[StudentProfile] = None
-    last_programs: List[Program] = field(default_factory=list)
+    
+    # ✅ FIX: Cleaner field names with correct types
     last_ui_programs: List[Dict[str, Any]] = field(default_factory=list, repr=False)
-    last_phases: List[Dict[str, Any]] = field(default_factory=list, repr=False)
+    last_timeline_events: List[Dict[str, Any]] = field(default_factory=list, repr=False)
+    last_projects: List[Dict[str, Any]] = field(default_factory=list, repr=False)
     last_plan_md: str = ""
-    last_profile_ui: Dict[str, Any] = field(default_factory=dict, repr=False)
-
+    
+    # For follow-up context
     conversation_summary: str = ""
     
     def is_valid(self, timeout_minutes: int) -> bool:

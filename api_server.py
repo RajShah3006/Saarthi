@@ -41,12 +41,7 @@ def submit(req: SubmitRequest):
     # 1) store inputs
     created = store.create_submission(req.model_dump())
 
-    # 2) generate roadmap (reuse your existing pipeline)
-    # We need a "session" to satisfy your current controller signature.
-    # Easiest: create a real session via SessionManager, but to keep it simple,
-    # we call RoadmapService directly would be better long-term.
-    #
-    # For now: call roadmap_service directly (recommended)
+    # 2) generate roadmap
     session = controllers.session_manager.create_session(req.student_name)
 
     profile = StudentProfile(
@@ -66,18 +61,28 @@ def submit(req: SubmitRequest):
 
     roadmap_md = result.message
     data = result.data or {}
+    
+    # ✅ FIX: Use correct keys
     ui_programs = data.get("programs", [])
-    ui_phases = data.get("phases", [])
+    ui_timeline = data.get("timeline_events", [])  # ✅ Fixed key
+    ui_projects = data.get("projects", [])          # ✅ Fixed key
 
     # 3) store generated outputs
-    store.save_generated_plan(created["id"], roadmap_md, ui_programs, ui_phases)
+    # ✅ FIX: Pass all 5 required arguments
+    store.save_generated_plan(
+        created["id"],
+        roadmap_md,
+        ui_programs,
+        ui_timeline,
+        ui_projects
+    )
 
     return SubmitResponse(id=created["id"], resume_token=created["resume_token"], status="GENERATED")
 
 
 @app.get("/api/submission/{submission_id}")
 def get_submission(submission_id: int, token: str):
-    sub = store.get_submission_by_token(submission_id, token)
+    sub = store.get_by_resume_code(submission_id, token)
     if not sub:
         raise HTTPException(status_code=404, detail="Not found")
     return store.unpack(sub)
@@ -87,14 +92,22 @@ def get_submission(submission_id: int, token: str):
 
 @app.get("/api/admin/submissions")
 def admin_list(status: Optional[str] = None, limit: int = 50):
-    subs = store.list_submissions(status=status, limit=limit)
-    # Return lightweight rows (no huge markdown if you want)
-    return [{"id": s["id"], "created_at": s["created_at"], "student_name": s["student_name"], "status": s["status"], "wants_email": bool(s["wants_email"])} for s in subs]
+    subs = store.list_queue(status_filter=status or "ALL", limit=limit)
+    return [
+        {
+            "id": s["id"],
+            "created_at": s["created_at"],
+            "student_name": s["student_name"],
+            "status": s["status"],
+            "wants_email": bool(s["wants_email"])
+        }
+        for s in subs
+    ]
 
 
 @app.get("/api/admin/submission/{submission_id}")
 def admin_get(submission_id: int):
-    sub = store.get_submission(submission_id)
+    sub = store.admin_get(submission_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Not found")
     return store.unpack(sub)
@@ -107,29 +120,29 @@ class UpdateEmailRequest(BaseModel):
 
 @app.post("/api/admin/update_email/{submission_id}")
 def admin_update_email(submission_id: int, req: UpdateEmailRequest):
-    sub = store.get_submission(submission_id)
+    sub = store.admin_get(submission_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Not found")
-    store.update_email_draft(submission_id, req.subject, req.body_text)
+    store.admin_save_email(submission_id, req.subject, req.body_text)
     return {"ok": True}
 
 
 @app.post("/api/admin/generate_email/{submission_id}")
 def admin_generate_email(submission_id: int):
-    sub = store.get_submission(submission_id)
+    sub = store.admin_get(submission_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Not found")
 
     sub_u = store.unpack(sub)
     email = build_email_from_submission(sub_u)
-    store.update_email_draft(submission_id, email["subject"], email["body_text"])
+    store.admin_save_email(submission_id, email["subject"], email["body_text"])
     return email
 
 
 @app.post("/api/admin/mark_sent/{submission_id}")
 def admin_mark_sent(submission_id: int):
-    sub = store.get_submission(submission_id)
+    sub = store.admin_get(submission_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Not found")
-    store.mark_sent(submission_id)
+    store.admin_mark_sent(submission_id)
     return {"ok": True}
