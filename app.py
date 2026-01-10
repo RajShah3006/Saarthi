@@ -618,41 +618,6 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
-
-    student["generate_btn"].click(
-        fn=generate_and_show,
-        inputs=[
-            student["grade_input"],
-            student["average_input"],
-            student["location_input"],
-            student["interest_tags_input"],
-            student["interest_details_input"],
-            student["subjects_input"],
-            student["extracurriculars_input"],
-            student["preferences_input"],
-            student["wants_email"],
-            student["student_email"],
-            session_state,
-            name_state,
-        ],
-        outputs=[
-            student["wizard_error"],
-            student["submission_code_out"],
-            student["resume_code_store"],
-            student["inputs_view"],
-            student["outputs_view"],
-            view_state,
-            student["email_only_notice"],
-            student["dashboard_wrap"],
-            student["timeline_display"],
-            student["programs_display"],
-            student["checklist_display"],
-            student["output_display"],
-            programs_state,
-            student["compare_select"],
-            student["compare_table"],
-        ],
-    )
 '''
     def generate_and_show(
         grade, average, location,
@@ -824,6 +789,42 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
+
+    student["generate_btn"].click(
+        fn=generate_and_show,
+        inputs=[
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["subjects_input"],
+            student["extracurriculars_input"],
+            student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
+            session_state,
+            name_state,
+        ],
+        outputs=[
+            student["wizard_error"],
+            student["submission_code_out"],
+            student["resume_code_store"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["email_only_notice"],
+            student["dashboard_wrap"],
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+            programs_state,
+            student["compare_select"],
+            student["compare_table"],
+        ],
+    )
+    
     # ---------------- back to inputs ----------------
     def go_edit_inputs():
         return gr.update(visible=True), gr.update(visible=False), "inputs"
