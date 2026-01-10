@@ -42,12 +42,10 @@ class Controllers:
 
             welcome_message = f"""## Welcome, {name}!
 Fill in your profile below and click **Generate Roadmap** to get personalized university guidance.
-
 **Tips for best results:**
 - Be specific about your interests
 - Include all relevant subjects
 - Mention your extracurricular activities
-
 *Session ID: {session.id[:8]}...*
 """
             return (
@@ -86,7 +84,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
           "md": "...",
           "profile": {...},
           "programs": [...],
-          "phases": [...]
+          "timeline_events": [...],
+          "projects": [...]
         }
         """
         try:
@@ -96,7 +95,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                     "md": "⚠️ Session expired. Please refresh the page to start a new session.",
                     "profile": {},
                     "programs": [],
-                    "phases": [],
+                    "timeline_events": [],
+                    "projects": [],
                 }
 
             validation = Validators.validate_profile_inputs(
@@ -112,7 +112,8 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                     "md": f"⚠️ **Validation Error**\n\n{validation.message}",
                     "profile": {},
                     "programs": [],
-                    "phases": [],
+                    "timeline_events": [],
+                    "projects": [],
                 }
 
             profile = StudentProfile(
@@ -132,19 +133,23 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                     "md": f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*",
                     "profile": {},
                     "programs": [],
-                    "phases": [],
+                    "timeline_events": [],
+                    "projects": [],
                 }
 
             # Store session context
             session.last_profile = profile
 
+            # ✅ FIX: Use correct keys from roadmap.py
             ui_programs = (result.data or {}).get("programs", []) or []
-            ui_phases = (result.data or {}).get("phases", []) or []
+            timeline_events = (result.data or {}).get("timeline_events", []) or []
+            projects = (result.data or {}).get("projects", []) or []
 
-            # store for followup rendering
-            session.last_programs = ui_programs
-            session.last_phases = ui_phases  # dynamic attr is fine (dataclass has no slots)
-            session.last_md = result.message  # dynamic attr
+            # Store for followup rendering
+            session.last_ui_programs = ui_programs
+            session.last_timeline_events = timeline_events  # Add as dynamic attr
+            session.last_projects = projects  # Add as dynamic attr
+            session.last_plan_md = result.message or ""
 
             ui_profile = {
                 "interest": profile.interests,
@@ -156,11 +161,13 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 "extracurriculars": profile.extracurriculars or "",
             }
 
+            # ✅ FIX: Return correct keys that app.py expects
             return {
                 "md": result.message or "",
                 "profile": ui_profile,
                 "programs": ui_programs,
-                "phases": ui_phases,
+                "timeline_events": timeline_events,
+                "projects": projects,
             }
 
         except Exception as e:
@@ -174,70 +181,48 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 ),
                 "profile": {},
                 "programs": [],
-                "phases": [],
+                "timeline_events": [],
+                "projects": [],
             }
 
     # -------------------------------------------------------
-    # FOLLOWUP (keeps programs/phases stable; only appends Q&A)
-    # signature matches app.py: (question, current_md, session_id)
+    # FOLLOWUP
+    # ✅ FIX: Return tuple (cleared_question, new_md) as app.py expects
     # -------------------------------------------------------
-    def handle_followup(self, question: str, current_md: str, session_id: str) -> Dict[str, Any]:
+    def handle_followup(self, question: str, current_md: str, session_id: str) -> Tuple[str, str]:
+        """
+        Returns (cleared_question, new_markdown)
+        """
         try:
             base_md = (current_md or "").strip()
 
             if not question or not question.strip():
-                # no changes, return what we have
-                return {
-                    "md": base_md,
-                    "profile": self._session_profile(session_id),
-                    "programs": self._session_programs(session_id),
-                    "phases": self._session_phases(session_id),
-                }
+                return ("", base_md)
 
             session = self.session_manager.get_session(session_id)
             if not session:
-                return {
-                    "md": base_md + "\n\n⚠️ Session expired. Please refresh to continue.",
-                    "profile": {},
-                    "programs": [],
-                    "phases": [],
-                }
+                return ("", base_md + "\n\n⚠️ Session expired. Please refresh to continue.")
 
             q = Validators.sanitize_text(question, self.config.MAX_FOLLOWUP_LENGTH)
 
             result = self.roadmap_service.followup(q, session)
             if not result.ok:
-                return {
-                    "md": base_md + f"\n\n❌ {result.message}",
-                    "profile": self._session_profile(session_id),
-                    "programs": self._session_programs(session_id),
-                    "phases": self._session_phases(session_id),
-                }
+                return ("", base_md + f"\n\n❌ {result.message}")
 
-            # Append Q&A WITHOUT triggering any re-parsing/deduping
+            # Append Q&A
             if "## Q&A" in base_md:
                 new_md = base_md + f"\n\n**You:** {q}\n\n**Saarthi:** {result.message}\n"
             else:
                 new_md = base_md + f"\n\n---\n\n## Q&A\n\n**You:** {q}\n\n**Saarthi:** {result.message}\n"
 
-            # Keep the same structured plan; only md changes
-            session.last_md = new_md
+            # Update session cache
+            session.last_plan_md = new_md
 
-            return {
-                "md": new_md,
-                "profile": self._session_profile(session_id),
-                "programs": self._session_programs(session_id),
-                "phases": self._session_phases(session_id),
-            }
+            return ("", new_md)  # ✅ Return tuple: (cleared_question, new_md)
 
         except Exception as e:
             logger.error(f"Followup error: {e}\n{traceback.format_exc()}")
-            return {
-                "md": (current_md or "") + f"\n\n❌ Error processing question: {str(e)}",
-                "profile": self._session_profile(session_id),
-                "programs": self._session_programs(session_id),
-                "phases": self._session_phases(session_id),
-            }
+            return ("", (current_md or "") + f"\n\n❌ Error processing question: {str(e)}")
 
     # -------------------------------------------------------
     # CLEAR FORM
@@ -261,13 +246,19 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         session = self.session_manager.get_session(session_id)
         if not session:
             return []
-        return getattr(session, "last_programs", []) or []
+        return getattr(session, "last_ui_programs", []) or []
 
-    def _session_phases(self, session_id: str) -> List[dict]:
+    def _session_timeline_events(self, session_id: str) -> List[dict]:
         session = self.session_manager.get_session(session_id)
         if not session:
             return []
-        return getattr(session, "last_phases", []) or []
+        return getattr(session, "last_timeline_events", []) or []
+
+    def _session_projects(self, session_id: str) -> List[dict]:
+        session = self.session_manager.get_session(session_id)
+        if not session:
+            return []
+        return getattr(session, "last_projects", []) or []
 
     def _session_profile(self, session_id: str) -> Dict[str, Any]:
         session = self.session_manager.get_session(session_id)
