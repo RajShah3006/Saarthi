@@ -527,17 +527,47 @@ def get_css(config: Config) -> str:
     }
     
     /* === SLIDER === */
-    input[type="number"] {
-        min-height: 80px !important;
-        height: 80px !important;
-        padding: 14px 18px !important;
+    /* === NUMBER INPUT & SLIDER === */
+    .tab-like-container {
+        min-height: 52px !important;
+        height: 52px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    
+    .tab-like-container input[type="number"],
+    input[type="number"].svelte-8epfm4,
+    input[data-testid="number-input"] {
+        min-height: 48px !important;
+        height: 48px !important;
+        padding: 12px 16px !important;
         font-size: 20px !important;
+        line-height: 1 !important;
         text-align: center !important;
         font-weight: 700 !important;
         color: var(--neon-cyan) !important;
-        background: linear-gradient(135deg, rgba(15, 8, 40, 0.9), rgba(10, 5, 30, 0.85)) !important;
+        background: rgba(15, 8, 40, 0.9) !important;
         border: 1px solid rgba(139, 92, 246, 0.3) !important;
         border-radius: 14px !important;
+    }
+    
+    .tab-like-container button,
+    button.reset-button,
+    button.svelte-8epfm4.reset-button {
+        min-height: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        width: 48px !important;
+        padding: 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        background: rgba(139, 92, 246, 0.2) !important;
+        border: 1px solid rgba(139, 92, 246, 0.3) !important;
+        border-radius: 12px !important;
+        color: var(--neon-purple-bright) !important;
     }
     
     input[type="range"] {
@@ -2246,42 +2276,78 @@ def get_css(config: Config) -> str:
     }
     
     /* === SLIDER - Neon Track === */
+    /* === NUMBER INPUT & SLIDER === */
+    .tab-like-container {
+        min-height: 52px !important;
+        height: 52px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    
+    .tab-like-container input[type="number"],
+    input[type="number"].svelte-8epfm4,
+    input[data-testid="number-input"] {
+        min-height: 48px !important;
+        height: 48px !important;
+        padding: 12px 16px !important;
+        font-size: 20px !important;
+        line-height: 1 !important;
+        text-align: center !important;
+        font-weight: 700 !important;
+        color: var(--neon-cyan) !important;
+        background: rgba(15, 8, 40, 0.9) !important;
+        border: 1px solid rgba(139, 92, 246, 0.3) !important;
+        border-radius: 14px !important;
+    }
+    
+    .tab-like-container button,
+    button.reset-button,
+    button.svelte-8epfm4.reset-button {
+        min-height: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        width: 48px !important;
+        padding: 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        background: rgba(139, 92, 246, 0.2) !important;
+        border: 1px solid rgba(139, 92, 246, 0.3) !important;
+        border-radius: 12px !important;
+        color: var(--neon-purple-bright) !important;
+    }
+    
     input[type="range"] {
         -webkit-appearance: none !important;
-        background: linear-gradient(
-            90deg,
-            rgba(0, 245, 255, 0.3),
-            rgba(168, 85, 247, 0.3)
-        ) !important;
+        background: linear-gradient(90deg, 
+            rgba(99, 102, 241, 0.3), 
+            rgba(168, 85, 247, 0.3)) !important;
         border-radius: 10px !important;
         height: 8px !important;
         border: none !important;
-        box-shadow: 
-            0 0 15px rgba(139, 92, 246, 0.3),
-            inset 0 1px 3px rgba(0, 0, 0, 0.3);
     }
     
     input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none !important;
-        width: 26px !important;
-        height: 26px !important;
+        width: 22px !important;
+        height: 22px !important;
         background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple)) !important;
         border-radius: 50% !important;
         cursor: pointer !important;
         box-shadow: 
-            0 0 25px rgba(0, 245, 255, 0.6),
-            0 0 50px rgba(168, 85, 247, 0.4),
-            inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-        border: 3px solid rgba(255, 255, 255, 0.2) !important;
-        transition: all 0.3s ease;
+            0 0 20px rgba(34, 211, 238, 0.5),
+            0 0 40px rgba(168, 85, 247, 0.3) !important;
+        border: 2px solid rgba(255, 255, 255, 0.2) !important;
+        transition: all 0.2s ease;
     }
     
     input[type="range"]::-webkit-slider-thumb:hover {
-        transform: scale(1.2);
+        transform: scale(1.15);
         box-shadow: 
-            0 0 35px rgba(0, 245, 255, 0.8),
-            0 0 70px rgba(168, 85, 247, 0.5),
-            inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+            0 0 25px rgba(34, 211, 238, 0.7),
+            0 0 50px rgba(168, 85, 247, 0.4) !important;
     }
     
     /* === CHECKBOX & RADIO - Neon Style === */
