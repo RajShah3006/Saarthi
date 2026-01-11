@@ -2278,8 +2278,8 @@ def get_css(config: Config) -> str:
     /* === SLIDER - Neon Track === */
     /* === NUMBER INPUT & SLIDER === */
     .tab-like-container {
-        min-height: 52px !important;
-        height: 52px !important;
+        min-height: 36px !important;
+        height: 36px !important;
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
@@ -2288,8 +2288,8 @@ def get_css(config: Config) -> str:
     .tab-like-container input[type="number"],
     input[type="number"].svelte-8epfm4,
     input[data-testid="number-input"] {
-        min-height: 48px !important;
-        height: 48px !important;
+        min-height: 36px !important;
+        height: 36px !important;
         padding: 12px 16px !important;
         font-size: 20px !important;
         line-height: 1 !important;
@@ -2304,8 +2304,8 @@ def get_css(config: Config) -> str:
     .tab-like-container button,
     button.reset-button,
     button.svelte-8epfm4.reset-button {
-        min-height: 48px !important;
-        height: 48px !important;
+        min-height: 36px !important;
+        height: 36px !important;
         min-width: 48px !important;
         width: 48px !important;
         padding: 12px !important;
