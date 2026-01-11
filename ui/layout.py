@@ -88,7 +88,6 @@ def create_ui_layout(config: Config) -> dict:
         # ---------------- INPUTS VIEW ----------------
         with gr.Column(visible=True, elem_id="inputs_view") as inputs_view:
             gr.HTML(f"<div class='status-badge'>{status_text}</div>")
-            gr.Markdown("## Student Wizard (Step-by-step)")
 
             wizard_error = gr.Markdown("", elem_classes="hint-text")
 
@@ -108,7 +107,7 @@ def create_ui_layout(config: Config) -> dict:
                 interest_tags_input = gr.CheckboxGroup(
                     choices=INTEREST_AREAS,
                     label="Interest Areas *",
-                    info="Pick at least 2.",
+                    info="Pick at least 1.",
                 )
                 interest_details_input = gr.Textbox(
                     label="Interest Details (optional)",

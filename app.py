@@ -391,8 +391,8 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         step = int(step)
 
         if step == 1:
-            if not tags or len(tags) < 2:
-                return (*set_step(1), gr.update(value="❌ Please pick at least 2 Interest Areas."), gr.update())
+            if not tags or len(tags) < 1:
+                return (*set_step(1), gr.update(value="❌ Please pick at least 1 Interest Areas."), gr.update())
             if wants_email and not valid_email(email):
                 return (*set_step(1), gr.update(value="❌ Please enter a valid email address."), gr.update())
             return (*set_step(2), gr.update(value=""), gr.update())
