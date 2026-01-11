@@ -527,13 +527,26 @@ def get_css(config: Config) -> str:
     }
     
     /* === SLIDER === */
+    input[type="number"] {
+        min-height: 80px !important;
+        height: 80px !important;
+        padding: 14px 18px !important;
+        font-size: 20px !important;
+        text-align: center !important;
+        font-weight: 700 !important;
+        color: var(--neon-cyan) !important;
+        background: linear-gradient(135deg, rgba(15, 8, 40, 0.9), rgba(10, 5, 30, 0.85)) !important;
+        border: 1px solid rgba(139, 92, 246, 0.3) !important;
+        border-radius: 14px !important;
+    }
+    
     input[type="range"] {
         -webkit-appearance: none !important;
         background: linear-gradient(90deg, 
             rgba(99, 102, 241, 0.3), 
             rgba(168, 85, 247, 0.3)) !important;
         border-radius: 10px !important;
-        height: 6px !important;
+        height: 8px !important;
         border: none !important;
     }
     
@@ -3466,140 +3479,5 @@ def get_css(config: Config) -> str:
             border: 1px solid #ccc !important;
             box-shadow: none !important;
         }
-    }
-
-    /* === SLIDER NUMBER INPUT FIX === */
-    input[type="number"],
-    .gr-slider input[type="number"],
-    .gr-number input,
-    .gr-box input[type="number"],
-    div[data-testid="number-input"] input,
-    .gr-slider-container input {
-        background: linear-gradient(
-            135deg,
-            rgba(15, 8, 40, 0.9) 0%,
-            rgba(10, 5, 30, 0.85) 100%
-        ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.3) !important;
-        border-radius: 14px !important;
-        color: var(--neon-cyan) !important;
-        font-family: 'Space Grotesk', 'JetBrains Mono', monospace !important;
-        font-weight: 700 !important;
-        font-size: 18px !important;
-        text-align: center !important;
-        padding: 12px 16px !important;
-        min-width: 80px !important;
-        box-shadow: 
-            inset 0 2px 8px rgba(0, 0, 0, 0.4),
-            0 0 20px rgba(139, 92, 246, 0.1) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    input[type="number"]:focus,
-    .gr-slider input[type="number"]:focus {
-        border-color: var(--neon-cyan) !important;
-        box-shadow: 
-            0 0 0 3px rgba(0, 245, 255, 0.15),
-            0 0 30px rgba(0, 245, 255, 0.2),
-            inset 0 2px 8px rgba(0, 0, 0, 0.4) !important;
-        color: var(--neon-cyan) !important;
-    }
-    
-    /* Remove default spinner buttons */
-    input[type="number"]::-webkit-inner-spin-button,
-    input[type="number"]::-webkit-outer-spin-button {
-        -webkit-appearance: none !important;
-        margin: 0 !important;
-    }
-    
-    input[type="number"] {
-        -moz-appearance: textfield !important;
-    }
-    
-    /* Slider container layout fix */
-    .gr-slider, 
-    div[class*="slider"] {
-        display: flex !important;
-        align-items: center !important;
-        gap: 16px !important;
-    }
-    
-    /* The reset/clear button next to number input */
-    .gr-slider button,
-    .gr-number button,
-    div[data-testid="number-input"] button {
-        background: linear-gradient(
-            135deg,
-            rgba(139, 92, 246, 0.2) 0%,
-            rgba(99, 102, 241, 0.15) 100%
-        ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.3) !important;
-        border-radius: 12px !important;
-        color: var(--neon-purple-bright) !important;
-        padding: 10px 12px !important;
-        min-width: 44px !important;
-        height: 44px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .gr-slider button:hover,
-    .gr-number button:hover {
-        background: rgba(139, 92, 246, 0.3) !important;
-        border-color: var(--neon-purple) !important;
-        transform: scale(1.05) !important;
-        box-shadow: 0 0 20px rgba(139, 92, 246, 0.3) !important;
-    }
-    
-    /* Number input wrapper/container */
-    .gr-number,
-    div[data-testid="number-input"],
-    .gr-slider > div {
-        display: flex !important;
-        align-items: center !important;
-        gap: 8px !important;
-        background: transparent !important;
-        border: none !important;
-    }
-    
-    /* Make the input + button group look cohesive */
-    .gr-number > div,
-    .gr-slider > div > div {
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        background: linear-gradient(
-            135deg,
-            rgba(10, 5, 30, 0.8) 0%,
-            rgba(15, 8, 40, 0.7) 100%
-        ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.25) !important;
-        border-radius: 16px !important;
-        padding: 4px !important;
-        box-shadow: 
-            0 4px 15px rgba(0, 0, 0, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-    }
-    
-    /* Slider label styling */
-    .gr-slider label,
-    .gr-number label {
-        color: var(--text-secondary) !important;
-        font-weight: 700 !important;
-        font-size: 13px !important;
-        letter-spacing: 1.5px !important;
-        text-transform: uppercase !important;
-        font-family: 'Space Grotesk', sans-serif !important;
-    }
-    
-    /* Slider min/max labels */
-    .gr-slider span,
-    .gr-slider .min-max {
-        color: var(--text-muted) !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        font-family: 'Space Grotesk', sans-serif !important;
     }
     """
