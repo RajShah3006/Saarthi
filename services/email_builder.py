@@ -126,18 +126,9 @@ def markdown_to_plaintext(md: str) -> str:
     # ═══════════════════════════════════════════════════════════
     
     # Checkboxes: - [ ] item → ☐ item, - [x] item → ☑ item
-    text = re.sub(r'^(\s*)- 
-$$
- 
-$$ ', r'\1☐ ', text, flags=re.MULTILINE)
-    text = re.sub(r'^(\s*)- 
-$$
-x
-$$ ', r'\1☑ ', text, flags=re.MULTILINE)
-    text = re.sub(r'^(\s*)- 
-$$
-X
-$$ ', r'\1☑ ', text, flags=re.MULTILINE)
+    text = re.sub(r'^(\s*)- $$$$ ', r'\1☐ ', text, flags=re.MULTILINE)
+    text = re.sub(r'^(\s*)- $$x$$ ', r'\1☑ ', text, flags=re.MULTILINE)
+    text = re.sub(r'^(\s*)- $$X$$ ', r'\1☑ ', text, flags=re.MULTILINE)
     
     # Unordered lists: - item or * item → • item
     text = re.sub(r'^(\s*)[-\*] ', r'\1• ', text, flags=re.MULTILINE)
