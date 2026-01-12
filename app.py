@@ -453,6 +453,25 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
     )
 
     # ---------------- generate ----------------
+    def show_loading():
+        loading_html = """
+        <div class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Generating your personalized roadmap<span class="loading-dots"></span></div>
+            <div class="loading-subtext">Analyzing programs & building your timeline...</div>
+            <div class="loading-progress">
+                <div class="loading-progress-bar"></div>
+            </div>
+        </div>
+        """
+        return (
+            gr.update(value=""),                    # wizard_error - clear any errors
+            gr.update(visible=False),               # inputs_view - hide inputs
+            gr.update(visible=True),                # outputs_view - show outputs area
+            gr.update(value=loading_html, visible=True),  # loading_indicator - show loading
+            gr.update(visible=True),               # dashboard_wrap - hide dashboard while loading
+        )
+    
     def generate_and_show(
         grade, average, location,
         tags, details,
@@ -481,6 +500,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 "inputs",
                 gr.update(value="", visible=False),
                 gr.update(visible=True),
+                gr.update(value="", visible=False),
                 gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
                 gr.update(value="<div class='card-empty'>No programs yet.</div>"),
                 gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
@@ -590,6 +610,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
                 "outputs",                              # view_state
                 gr.update(value=notice, visible=True),  # email_only_notice
                 gr.update(visible=False),               # dashboard_wrap
+                gr.update(value="", visible=False),     # loading_indicator
                 "",                                     # timeline_display (hidden)
                 "",                                     # programs_display (hidden)
                 "",                                     # checklist_display (hidden)
@@ -615,6 +636,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "outputs",                           # view_state
             gr.update(value="", visible=False),  # email_only_notice
             gr.update(visible=True),             # dashboard_wrap
+            gr.update(value="", visible=False),  # loading_indicator
             timeline_html,                       # timeline_display
             programs_html,                       # programs_display
             checklist_html,                      # checklist_display
@@ -623,7 +645,53 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             gr.update(choices=choices, value=[]),
             gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
         )
-
+        
+    generate_event = student["generate_btn"].click(
+        fn=show_loading,
+        inputs=[],
+        outputs=[
+            student["wizard_error"],
+            student["inputs_view"],
+            student["outputs_view"],
+            student["loading_indicator"],  # Add this component
+            student["dashboard_wrap"],
+        ],
+    ).then(
+        fn=generate_and_show,
+        inputs=[
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["subjects_input"],
+            student["extracurriculars_input"],
+            student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
+            session_state,
+            name_state,
+        ],
+        outputs=[
+            student["wizard_error"],
+            student["submission_code_out"],
+            student["resume_code_store"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["email_only_notice"],
+            student["dashboard_wrap"],
+            student["loading_indicator"],  # Add this to hide loading when done
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+            programs_state,
+            student["compare_select"],
+            student["compare_table"],
+        ],
+    )
+    '''
     student["generate_btn"].click(
         fn=generate_and_show,
         inputs=[
@@ -658,7 +726,7 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             student["compare_table"],
         ],
     )
-    
+    '''
     # ---------------- back to inputs ----------------
     def go_edit_inputs():
         return gr.update(visible=True), gr.update(visible=False), "inputs"

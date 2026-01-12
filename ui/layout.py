@@ -3,13 +3,7 @@ import gradio as gr
 from config import Config
 
 COURSES = sorted([
-    "Advanced Functions (MHF4U)", "Calculus & Vectors (MCV4U)",
-    "Data Management (MDM4U)", "English (ENG4U)",
-    "Biology (SBI4U)", "Chemistry (SCH4U)", "Physics (SPH4U)",
-    "Computer Science (ICS4U)", "Business Leadership (BOH4M)",
-    "Functions (MCR3U)", "English (ENG3U)", "Biology (SBI3U)",
-    "Chemistry (SCH3U)", "Physics (SPH3U)", "Computer Science (ICS3U)",
-    "World History (CHW3M)", "Law (CLU3M)", "Accounting (BAF3M)",
+    " Dance (ATC1O)", " Dance (ATC2O)", " Dance (ATC3M)", " Dance (ATC3O)", " Dance (ATC4M)", " Dance (ATC4E)", " Drama (ADA1O)", " Drama (ADA2O)", " Drama (ADA3M)", " Drama (ADA3O)", " Drama (ADA4M)", " Drama (ADA4E)", " Integrated Arts (ALC1O)", " Integrated Arts (ALC2O)", " Exploring and Creating in the Arts (AEA3O)", " Exploring and Creating in the Arts (AEA4O)", " Media Arts (ASM2O)", " Media Arts (ASM3M)", " Media Arts (ASM3O)", " Media Arts (ASM4M)", " Media Arts (ASM4E)", " Music (AMU1O)", " Music (AMU2O)", " Music (AMU3M)", " Music (AMU3O)", " Music (AMU4M)", " Music (AMU4E)", " Visual Arts (AVI1O)", " Visual Arts (AVI2O)", " Visual Arts (AVI3M)", " Visual Arts (AVI3O)", " Visual Arts (AVI4M)", " Visual Arts (AVI4E)", " Information and Communication Technology in Business (BTT1O)", " Introduction to Business (BBI1O)", " Information and Communication Technology in Business (BTT2O)", " Introduction to Business (BBI2O)", " Financial Accounting Fundamentals (BAF3M)", " Accounting Essentials (BAI3E)", " Financial Accounting Principles (BAT4M)", " Accounting for a Small Business (BAN4E)", " Entrepreneurship: The Venture (BDI3C)", " Entrepreneurship: The Enterprising Person (BDP3O)", " Entrepreneurship: Venture Planning in an Electronic Age (BDV4C)", " Information and Communication Technology: The Digital Environment (BTA3O)", " Information and Communication Technology: Multimedia Solutions (BTX4C)", " Information and Communication Technology in the Workplace (BTX4E)", " International Business Fundamentals (BBB4M)", " International Business Essentials (BBB4E)", " Marketing: Goods, Services, Events (BMI3C)", " Marketing: Retail and Service (BMX3E)", " Business Leadership: Management Fundamentals (BOH4M)", " Business Leadership: Becoming a Manager (BOG4E)", " Issues in Canadian Geography (CGC1D)", " Issues in Canadian Geography (CGC1P)", " Regional Geography (CGD3M)", " Forces of Nature: Physical Processes and Disasters (CGF3M)", " Travel and Tourism: A Geographic Perspective (CGG3O)", " Introduction to Spatial Technologies (CGT3O)", " World Issues: A Geographic Analysis (CGW4U)", " World Issues: A Geographic Analysis (CGW4C)", " World Geography: Urban Patterns and Population Issues (CGU4M)", " Spatial Technologies in Action (CGO4M)", " The Environment and Resource Management (CGR4M)", " Living in a Sustainable World (CGR4E)", " Canadian History since World War I (CHC2D)", " Canadian History since World War I (CHC2P)", " Origins and Citizenship: The History of a Canadian Ethnic Group (CHE3O)", " American History (CHA3U)", " World History to the End of the Fifteenth Century (CHW3M)", " World History since 1900: Global and Regional Interactions (CHT3O)", " Canada: History, Identity, and Culture (CHI4U)", " World History since the Fifteenth Century (CHY4U)", " World History since the Fifteenth Century (CHY4C)", " Adventures in World History (CHM4E)", " Understanding Canadian Law (CLU3M)", " Understanding Canadian Law in Everyday Life (CLU3E)", " Canadian and International Law (CLN4U)", " Legal Studies (CLN4C)", " Civics and Citizenship (CHV2O)", " Politics in Action: Making Change (CPC3O)", " Canadian and International Politics (CPW4U)", " Classical Languages (Ancient Greek/Latin) Level 1 (LVGBD/LVLBD)", " Classical Languages (Ancient Greek/Latin) Level 2 (LVGCU/LVLCU)", " Classical Languages (Ancient Greek/Latin) Level 3 (LVGDU/LVLDU)", " Classical Civilization (LVV4U)", " International Languages Level 1 Academic (LBABD–LDYBD)", " International Languages Level 1 Open (LBABO–LDYBO)", " International Languages Level 2 University (LBACU–LDYCU)", " International Languages Level 2 Open (LBACO–LDYCO)", " International Languages Level 3 University (LBADU–LDYDU)", " International Languages Level 3 Open (LBADO–LDYDO)", " Introduction to Computer Studies (ICS2O)", " Introduction to Computer Science (ICS3U)", " Introduction to Computer Programming (ICS3C)", " Computer Science (ICS4U)", " Computer Programming (ICS4C)", " Creating Opportunities through Co-op (DCO3O)", " English (ENG1D)", " English (ENG1P)", " English (ENG2D)", " English (ENG2P)", " Literacy Skills: Reading and Writing (ELS2O)", " English (ENG3U)", " English (ENG3C)", " English (ENG3E)", " Canadian Literature (ETC3M)", " Media Studies (EMS3O)", " Presentation and Speaking Skills (EPS3O)", " English (ENG4U)", " English (ENG4C)", " English (ENG4E)", " Studies in Literature (ETS4U)", " The Writer’s Craft (EWC4U)", " Studies in Literature (ETS4C)", " The Writer’s Craft (EWC4C)", " Business and Technological Communication (EBT4O)", " Ontario Secondary School Literacy Course (OLC3O/OLC4O)", " ESL Level 1 (ESLAO)", " ESL Level 2 (ESLBO)", " ESL Level 3 (ESLCO)", " ESL Level 4 (ESLDO)", " ESL Level 5 (ESLEO)", " ELD Level 1 (ELDAO)", " ELD Level 2 (ELDBO)", " ELD Level 3 (ELDCO)", " ELD Level 4 (ELDDO)", " ELD Level 5 (ELDEO)", " Expressions of First Nations, Métis, and Inuit Cultures (NAC1O)", " First Nations, Métis, and Inuit in Canada (NAC2O)", " English: Understanding Contemporary First Nations, Métis, and Inuit Voices (NBE3U)", " English: Understanding Contemporary First Nations, Métis, and Inuit Voices (NBE3C)", " English: Understanding Contemporary First Nations, Métis, and Inuit Voices (NBE3E)", " Contemporary First Nations, Métis, and Inuit Issues and Perspectives (NDA3M)", " World Views and Aspirations of First Nations, Métis, and Inuit Communities in Canada (NBV3C)", " World Views and Aspirations of First Nations, Métis, and Inuit Communities in Canada (NBV3E)", " Contemporary Indigenous Issues and Perspectives in a Global Context (NDW4M)", " First Nations, Métis, and Inuit Governance in Canada (NDG4M)", " Core French (FSF1D)", " Core French (FSF1P)", " Core French (FSF1O)", " Extended French (FEF1D)", " French Immersion (FIF1D)", " French Immersion (FIF1P)", " Core French (FSF2D)", " Core French (FSF2P)", " Core French (FSF2O)", " Extended French (FEF2D)", " French Immersion (FIF2D)", " French Immersion (FIF2P)", " Core French (FSF3U)", " Core French (FSF3O)", " Extended French (FEF3U)", " French Immersion (FIF3U)", " French Immersion (FIF3O)", " Core French (FSF4U)", " Core French (FSF4O)", " Extended French (FEF4U)", " French Immersion (FIF4U)", " French Immersion (FIF4O)", " Learning Strategies 1: Skills for Success in Secondary School (GLS1O)", " Learning Strategies 1: Skills for Success in Secondary School (GLE1O)", " Career Studies (GLC2O)", " Learning Strategies 1: Skills for Success in Secondary School (GLE2O)", " Discovering the Workplace (GLD2O)", " Designing Your Future (GWL3O)", " Leadership and Peer Support (GPP3O)", " Advanced Learning Strategies: Skills for Success After Secondary School (GLE3O)", " Advanced Learning Strategies: Skills for Success After Secondary School (GLS4O)", " Advanced Learning Strategies: Skills for Success After Secondary School (GLE4O)", " Navigating the Workplace (GLN4O)", " Healthy Active Living Education (PPL1O)", " Healthy Active Living Education (PPL2O)", " Healthy Active Living Education (PPL3O)", " Health for Life (PPZ3C)", " Healthy Active Living Education (PPL4O)", " Introductory Kinesiology (PSK4U)", " Recreation and Healthy Active Living Leadership (PLF4M)", " Interdisciplinary Studies (IDC3O)", " Interdisciplinary Studies (IDP3O)", " Interdisciplinary Studies (IDC4U)", " Interdisciplinary Studies (IDP4U)", " Interdisciplinary Studies (IDC4O)", " Interdisciplinary Studies (IDP4O)", " Principles of Mathematics (MPM1D)", " Foundations of Mathematics (MFM1P)", " Mathematics Transfer (MPM1H)", " Principles of Mathematics (MPM2D)", " Foundations of Mathematics (MFM2P)", " Functions (MCR3U)", " Functions and Applications (MCF3M)", " Foundations for College Mathematics (MBF3C)", " Mathematics for Work and Everyday Life (MEL3E)", " Advanced Functions (MHF4U)", " Calculus and Vectors (MCV4U)", " Mathematics of Data Management (MDM4U)", " Mathematics for College Technology (MCT4C)", " Foundations for College Mathematics (MAP4C)", " Mathematics for Work and Everyday Life (MEL4E)", " Science (SNC1D)", " Science (SNC1P)", " Science (SNC2D)", " Science (SNC2P)", " Science (SNC4M)", " Science (SNC4E)", " Biology (SBI3U)", " Biology (SBI3C)", " Biology (SBI4U)", " Chemistry (SCH3U)", " Chemistry (SCH4U)", " Chemistry (SCH4C)", " Earth and Space Science (SES4U)", " Environmental Science (SVN3M)", " Environmental Science (SVN3E)", " Physics (SPH3U)", " Physics (SPH4U)", " Physics (SPH4C)", " Gender Studies (HSG3M)", " Equity, Diversity, and Social Justice (HSE3E)", " Equity and Social Justice: From Theory to Practice (HSE4M)", " World Cultures (HSC4M)", " Exploring Family Studies (HIF1O)", " Food and Nutrition (HFN1O)", " Exploring Family Studies (HIF2O)", " Food and Nutrition (HFN2O)", " Clothing (HNL2O)", " Understanding Fashion (HNC3C)", " Housing and Home Design (HLS3O)", " Food and Culture (HFC3M)", " Food and Culture (HFC3E)", " Dynamics of Human Relationships (HHD3O)", " Working with Infants and Young Children (HPW3C)", " Raising Healthy Children (HPC3O)", " The World of Fashion (HNB4M)", " Nutrition and Health (HFA4U)", " Nutrition and Health (HFA4C)", " Food and Healthy Living (HFL4E)", " Families in Canada (HHS4U)", " Families in Canada (HHS4C)", " Human Development throughout the Lifespan (HHG4M)", " Personal Life Management (HIP4O)", " Working with School-Age Children and Adolescents (HPD4C)", " Introduction to Anthropology, Psychology, and Sociology (HSP3U)", " Introduction to Anthropology, Psychology, and Sociology (HSP3C)", " Challenge and Change in Society (HSB4U)", " Philosophy: The Big Questions (HZB3M)", " Philosophy: Questions and Theories (HZT4U)", " World Religions and Belief Traditions: Perspectives, Issues, and Challenges (HRT3M)", " World Religions and Belief Traditions in Daily Life (HRF3O)", " Exploring Technologies (TIJ1O)", " Communications Technology (TGJ2O)", " Construction Technology (TCJ2O)", " Construction Engineering Technology (TCJ3C)", " Construction Technology (TCJ3E)", " Custom Woodworking (TWJ3E)", " Construction Engineering Technology (TCJ4C)", " Construction Technology (TCJ4E)", " Custom Woodworking (TWJ4E)", " Green Industries (THJ2O)", " Green Industries (THJ3M)", " Green Industries (THJ3E)", " Green Industries (THJ4M)", " Green Industries (THJ4E)", " Hairstyling and Aesthetics (TXJ2O)", " Hairstyling and Aesthetics (TXJ3E)", " Hairstyling and Aesthetics (TXJ4E)", " Health Care (TPJ2O)", " Health Care (TPJ3M)", " Health Care (TPJ3C)", " Health Care (TPJ4M)", " Health Care (TPJ4C)", " Child Development and Gerontology (TOJ4C)", " Health Care: Support Services (TPJ4E)", " Hospitality and Tourism (TFJ2O)", " Hospitality and Tourism (TFJ3C)", " Hospitality and Tourism (TFJ3E)", " Hospitality and Tourism (TFJ4C)", " Hospitality and Tourism (TFJ4E)", " Manufacturing Technology (TMJ2O)", " Manufacturing Engineering Technology (TMJ3M)", " Manufacturing Technology (TMJ3C)", " Manufacturing Technology (TMJ3E)", " Manufacturing Engineering Technology (TMJ4M)", " Manufacturing Technology (TMJ4C)", " Manufacturing Technology (TMJ4E)", " Technological Design (TDJ2O)", " Technological Design (TDJ3M)", " Technological Design and the Environment (TDJ3O)", " Technological Design (TDJ4M)", " Technological Design in the Twenty-first Century (TDJ4O)", " Transportation Technology (TTJ2O)", " Transportation Technology (TTJ3C)", " Transportation Technology: Vehicle Ownership (TTJ3O)", " Transportation Technology (TTJ4C)", " Transportation Technology: Vehicle Maintenance (TTJ4E)", " Creative Arts for Enjoyment and Expression (KAL)", " Money Management and Personal Banking (KBB)", " Transit Training and Community Exploration (KCC)", " Exploring Our World (KCW)", " Language and Communication Development (KEN)", " Personal Life Skills (KGL)", " Exploring the World of Work (KGW)", " Social Skills Development (KHD)", " Culinary Skills (KHI)", " Numeracy and Numbers (KMM)", " First Canadians (KNA)", " Personal Health and Fitness (KPF)", " Choice Making for Healthy Living (KPH)", " Self Help and Self Care (KPP)", " Exploring Our Environment (KSN)", " Computer Skills (KTT)",
 ])
 
 INTEREST_AREAS = [
@@ -37,7 +31,7 @@ def create_ui_layout(config: Config) -> dict:
         name_input = gr.Textbox(label="Your Name", placeholder="Enter your name", elem_classes="glass-input")
         start_btn = gr.Button("Start Session →", variant="primary", elem_classes="primary-btn")
 
-        gr.Markdown("#### Resume")
+        gr.Markdown("#### Resume previous session")
         resume_code_input = gr.Textbox(
             label="Resume Code",
             placeholder="example: 12:AbCdEf...",
@@ -49,35 +43,35 @@ def create_ui_layout(config: Config) -> dict:
 
         # JS: auto-fill resume_code_input from localStorage, and store new codes later
         gr.HTML("""
-<script>
-(() => {
-  const KEY = "saarthi_last_resume_code";
-  function getInputById(id){
-    const root = document.getElementById(id);
-    if(!root) return null;
-    return root.querySelector("textarea, input");
-  }
-  function setVal(id, val){
-    const el = getInputById(id);
-    if(!el) return;
-    el.value = val;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-  window.addEventListener("load", () => {
-    const saved = localStorage.getItem(KEY) || "";
-    if(saved) setVal("resume_code_input", saved);
-  });
-
-  // Store whenever hidden field changes
-  function readAndStore(){
-    const el = getInputById("resume_code_store");
-    if(!el) return;
-    const v = (el.value || "").trim();
-    if(v) localStorage.setItem(KEY, v);
-  }
-  setInterval(readAndStore, 1200);
-})();
-</script>
+            <script>
+            (() => {
+              const KEY = "saarthi_last_resume_code";
+              function getInputById(id){
+                const root = document.getElementById(id);
+                if(!root) return null;
+                return root.querySelector("textarea, input");
+              }
+              function setVal(id, val){
+                const el = getInputById(id);
+                if(!el) return;
+                el.value = val;
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+              }
+              window.addEventListener("load", () => {
+                const saved = localStorage.getItem(KEY) || "";
+                if(saved) setVal("resume_code_input", saved);
+              });
+            
+              // Store whenever hidden field changes
+              function readAndStore(){
+                const el = getInputById("resume_code_store");
+                if(!el) return;
+                const v = (el.value || "").trim();
+                if(v) localStorage.setItem(KEY, v);
+              }
+              setInterval(readAndStore, 1200);
+            })();
+            </script>
         """)
 
         gr.Markdown("*No account needed — session stays in your browser.*", elem_classes="hint-text")
@@ -159,6 +153,7 @@ def create_ui_layout(config: Config) -> dict:
             with gr.Column(visible=False) as step4:
                 gr.Markdown("### 4) Review + Generate")
                 review_box = gr.Markdown("Fill earlier steps to preview here.", elem_classes="output-box")
+                loading_indicator = gr.HTML(value="",visible=False, elem_id="loading_indicator")
                 generate_btn = gr.Button("Generate Roadmap", variant="primary", elem_classes="primary-btn", interactive=False)
 
             with gr.Row():
@@ -312,6 +307,7 @@ def create_ui_layout(config: Config) -> dict:
             "preferences_input": preferences_input,
 
             "review_box": review_box,
+            "loading_indicator": loading_indicator,
             "generate_btn": generate_btn,
 
             "back_btn": back_btn,
