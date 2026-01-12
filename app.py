@@ -1,771 +1,1055 @@
-import re
-import json
-import os
-import csv
-import datetime
-import time
-
-import numpy as np
-import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
+# app.py
 import gradio as gr
-import google.generativeai as genai
+import logging
+import sys
+import re
+import inspect
+from typing import Any, Dict, Tuple, List
+from datetime import date, timedelta
 
-# ========== CONFIG ==========
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("⚠️ GEMINI_API_KEY missing in environment.")
-else:
-    genai.configure(api_key=GEMINI_API_KEY)
+from services.github_issues import GitHubIssuesClient
+from config import Config
+from controllers import Controllers
+from ui.layout import create_ui_layout
+from ui.styles import get_css
 
-GEMINI_MODEL_NAME = "gemini-2.5-flash"
-model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-chat = model.start_chat()
+from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
+from services.submissions_store import SubmissionStore
+from services.email_builder import build_email_from_submission
 
-ADMIN_PASSWORD = "saarthi-admin-rs"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("saarthi")
 
-CACHE_FILE = "university_data_cached.json"
-LOG_FILE = "user_traffic_logs.csv"
-USER_FILE = "users.json"
-CHAT_FILE = "chats.json"
+store = SubmissionStore()
+gh = GitHubIssuesClient()
 
-GRADE_OPTIONS = ["Grade 11", "Grade 12", "Gap Year"]
-
-ALL_COURSES = [
-    "Dramatic Arts (ADA4M1)", "Drama Film/Video (ADV4M1)", "Exploring and Creating in the Arts (AEA4O1)",
-    "Guitar Music (AMG4M1)", "Music (AMU4M1)", "Visual Arts (AVI4M1)",
-    "Visual Arts - Info/Consumer (AWE4M1)", "Visual Arts - Fashion (AWI4M1)",
-    "Visual Arts - Drawing (AWM4M1)", "Visual Arts - Photography (AWQ4M1)",
-    "Visual Arts - Film/Video (AWR4M1)", "Visual Arts - Computer (AWS4M1)",
-    "Visual Arts - Non-Traditional (AWT4M1)", "Entrepreneurship: Venture Planning (BDV4C1)",
-    "Environment & Resource Mgmt (CGR4M1)", "World Issues (CGW4U1)",
-    "Canada: History, Identity, Culture (CHI4U1)", "World History (CHY4U1)",
-    "Canadian & International Law (CLN4U1)", "Canadian & World Politics (CPW4U1)",
-    "English (University) (ENG4U1)", "English (College) (ENG4C1)", "Studies in Literature (ETS4U1)",
-    "The Writer's Craft (EWC4U1)", "Nutr. & Health (HFA4U1)", "Personal Life Mgmt (HIP4O1)",
-    "Challenge & Change (HSB4U1)", "Equity & Social Justice (HSE4M1)", "Philosophy (HZT4U1)",
-    "Interdisciplinary Studies (IDC4U1)", "College Math (MAP4C1)", "Calculus/Vectors (MCV4U1)",
-    "Data Management (MDM4U1)", "Advanced Functions (MHF4U1)", "Literacy (OLC4O1)",
-    "Personal Fitness (PAF4O1)", "Recreation (PLF4M1)", "Active Living (PPL4O1)",
-    "Kinesiology (PSK4U1)", "Biology (SBI4U1)", "Chemistry (SCH4U1)", "Physics (SPH4U1)",
-    "Dramatic Arts (ADA3M1)", "Drama Film (ADV3M1)", "Guitar Music (AMG3M1)",
-    "Media Arts (ASM3M1)", "Visual Arts (AVI3M1)", "Arts & Crafts (AWA3M1)",
-    "Fashion Arts (AWI3M1)", "Photography (AWQ3M1)", "Accounting (BAF3M1)",
-    "Entrepreneurship (BDI3C1)", "Marketing (BMI3C1)", "Forces of Nature (CGF3M1)",
-    "Travel/Tourism (CGG3O1)", "Genocide Studies (CHG381)", "World History (CHW3M1)",
-    "Canadian Law (CLU3M1)", "Media Studies (EMS3O1)", "Food & Culture (HFC3M1)",
-    "World Religions (HRT3M1)", "Anth/Psych/Soc (HSP3U1)", "Philosophy (HZB3M1)",
-    "Functions (MCR3U1)", "Functions & Apps (MCF3M1)", "First Nations Voices (NBE3U1)",
-    "Biology (SBI3U1)", "Chemistry (SCH3U1)", "Physics (SPH3U1)", "Environmental Sci (SVN3M1)",
-    "Tech Design (TDJ3M1)", "Hairstyling (TXJ3E1)"
-]
-
-ghost_css = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-body, .gradio-container {
-    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1729 100%);
-    font-family: "Inter", sans-serif;
-    color: #e8f1ff;
-    position: relative;
-}
-
-/* Animated gradient orbs background */
-.gradio-container:before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: 
-        radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.12) 0%, transparent 50%),
-        radial-gradient(circle at 40% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
-    animation: floatOrbs 20s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 0;
-}
-
-@keyframes floatOrbs {
-    0%, 100% { opacity: 0.6; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.1); }
-}
-
-/* Grid overlay */
-.gradio-container:after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Make all children above background */
-.gradio-container > * {
-    position: relative;
-    z-index: 1;
-}
-
-/* Translucent glass panels */
-.gr-panel, .gr-box, .gr-form, .gr-input {
-    background: rgba(15, 23, 42, 0.3) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-    border-radius: 20px !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 0 0 1px rgba(59, 130, 246, 0.1);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.gr-panel:hover, .gr-box:hover {
-    background: rgba(15, 23, 42, 0.4) !important;
-    border-color: rgba(59, 130, 246, 0.4) !important;
-    box-shadow: 
-        0 12px 48px rgba(59, 130, 246, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 0 0 1px rgba(59, 130, 246, 0.2);
-    transform: translateY(-2px);
-}
-
-/* Translucent input fields */
-textarea, input, .gr-textbox, .gr-text-input, select {
-    background: rgba(15, 23, 42, 0.4) !important;
-    border: 2px solid rgba(59, 130, 246, 0.25) !important;
-    border-radius: 14px !important;
-    color: #e8f1ff !important;
-    padding: 14px !important;
-    font-size: 15px !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    transition: all 0.3s ease;
-}
-
-textarea:focus, input:focus, .gr-textbox:focus, select:focus {
-    background: rgba(15, 23, 42, 0.5) !important;
-    border-color: rgba(59, 130, 246, 0.6) !important;
-    box-shadow: 
-        0 0 0 4px rgba(59, 130, 246, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-    outline: none !important;
-}
-
-textarea::placeholder, input::placeholder {
-    color: rgba(203, 213, 225, 0.5) !important;
-}
-
-/* Glass buttons */
-button {
-    background: rgba(59, 130, 246, 0.2) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(59, 130, 246, 0.4) !important;
-    color: #93c5fd !important;
-    border-radius: 14px !important;
-    padding: 12px 24px !important;
-    font-weight: 600 !important;
-    font-size: 15px !important;
-    cursor: pointer !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    box-shadow: 
-        0 4px 16px rgba(59, 130, 246, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-button:hover {
-    background: rgba(59, 130, 246, 0.35) !important;
-    border-color: rgba(59, 130, 246, 0.6) !important;
-    color: #dbeafe !important;
-    transform: translateY(-2px);
-    box-shadow: 
-        0 8px 24px rgba(59, 130, 246, 0.35),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
-}
-
-button:active {
-    transform: translateY(0px);
-}
-
-/* Primary button - Golden glass */
-.primary {
-    background: rgba(245, 158, 11, 0.25) !important;
-    border: 1px solid rgba(245, 158, 11, 0.5) !important;
-    color: #fcd34d !important;
-    box-shadow: 
-        0 4px 20px rgba(245, 158, 11, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-}
-
-.primary:hover {
-    background: rgba(245, 158, 11, 0.4) !important;
-    border-color: rgba(245, 158, 11, 0.7) !important;
-    color: #fef3c7 !important;
-    box-shadow: 
-        0 8px 32px rgba(245, 158, 11, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Translucent markdown */
-.gr-markdown, .gr-html {
-    background: rgba(15, 23, 42, 0.25) !important;
-    border: 1px solid rgba(59, 130, 246, 0.15) !important;
-    border-radius: 20px !important;
-    padding: 24px !important;
-    color: #e8f1ff !important;
-    line-height: 1.8 !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.gr-markdown h1, .gr-markdown h2, .gr-markdown h3 {
-    color: #93c5fd !important;
-    font-weight: 700 !important;
-    margin-top: 28px !important;
-    margin-bottom: 14px !important;
-    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-
-.gr-markdown h2 {
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.gr-markdown strong {
-    color: #fbbf24 !important;
-    font-weight: 600 !important;
-}
-
-.gr-markdown a {
-    color: #60a5fa !important;
-    text-decoration: none !important;
-    border-bottom: 1px solid rgba(96, 165, 250, 0.4);
-    transition: all 0.2s;
-    padding-bottom: 2px;
-}
-
-.gr-markdown a:hover {
-    color: #93c5fd !important;
-    border-bottom-color: rgba(147, 197, 253, 0.8);
-    text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-}
-
-.gr-markdown code {
-    background: rgba(59, 130, 246, 0.15) !important;
-    padding: 2px 6px !important;
-    border-radius: 6px !important;
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    font-family: 'Fira Code', monospace !important;
-}
-
-.gr-markdown hr {
-    border: none !important;
-    height: 1px !important;
-    background: linear-gradient(90deg, 
-        transparent, 
-        rgba(59, 130, 246, 0.4), 
-        transparent) !important;
-    margin: 24px 0 !important;
-}
-
-/* Glass scrollbar */
-::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
-}
-
-::-webkit-scrollbar-track {
-    background: rgba(15, 23, 42, 0.2);
-    border-radius: 10px;
-    backdrop-filter: blur(8px);
-}
-
-::-webkit-scrollbar-thumb {
-    background: rgba(59, 130, 246, 0.3);
-    border-radius: 10px;
-    border: 2px solid rgba(15, 23, 42, 0.2);
-    backdrop-filter: blur(8px);
-    transition: all 0.3s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(59, 130, 246, 0.5);
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
-}
-
-/* Labels with glow */
-label {
-    color: #cbd5e1 !important;
-    font-weight: 500 !important;
-    font-size: 14px !important;
-    margin-bottom: 8px !important;
-    text-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
-}
-
-/* Dropdown translucent */
-.gr-dropdown {
-    background: rgba(15, 23, 42, 0.4) !important;
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-}
-
-/* Group containers */
-.gr-group {
-    background: rgba(15, 23, 42, 0.2) !important;
-    border: 1px solid rgba(59, 130, 246, 0.1) !important;
-    border-radius: 16px !important;
-    backdrop-filter: blur(16px) !important;
-}
-
-/* Loading spinner glow */
-.loading {
-    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Shimmer effect on hover */
-@keyframes shimmer {
-    0% { background-position: -1000px 0; }
-    100% { background-position: 1000px 0; }
-}
-
-.gr-panel:hover::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(59, 130, 246, 0.1),
-        transparent
-    );
-    background-size: 1000px 100%;
-    animation: shimmer 2s infinite;
-    border-radius: 20px;
-    pointer-events: none;
-}
-
-/* Hide Gradio footer */
-footer {
-    display: none !important;
-}
-
-/* Alternative: Hide specific footer elements */
-.gradio-container footer,
-.gradio-container .footer {
-    display: none !important;
-}
-
-/* Hide the Built with Gradio link */
-.built-with-gradio {
-    display: none !important;
-}
-
-/* Remove Gradio loading bar */
-.progress-bar,
-.progress-bar-wrap,
-.loading,
-.eta-bar,
-.block-label-loading,
-.wrap.pending {
-    display: none !important;
-}
-
-/* Hide the orange/gold border animation */
-.pending {
-    border: 1px solid rgba(59, 130, 246, 0.3) !important;
-    animation: none !important;
-}
-
-/* Remove any pulsing/loading effects */
-@keyframes pulse {
-    0%, 100% { border-color: rgba(59, 130, 246, 0.3); }
-}
-
-/* Hide status indicator */
-.loading-spinner,
-.loader {
-    display: none !important;
-}
-</style>
-"""
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-# ========== DATA LOADERS ==========
+def create_app() -> gr.Blocks:
+    config = Config()
+    controllers = Controllers(config)
+    css = get_css(config)
+    theme = gr.themes.Soft(primary_hue="slate", secondary_hue="indigo", neutral_hue="slate")
 
-def load_programs():
-    if os.path.exists(CACHE_FILE):
+    # Gradio 6: pass css/theme to launch(), not Blocks()
+    with gr.Blocks(title="Saarthi AI - University Guidance") as app:
+        components = create_ui_layout(config)
+        wire_events(components, controllers, config)
+
+    # Attach launch args on the app object for __main__
+    app._saarthi_css = css
+    app._saarthi_theme = theme
+    return app
+
+
+def wire_events(components: dict, controllers: Controllers, config: Config):
+    session_state = components["session_state"]
+    name_state = components["name_state"]
+    view_state = components["view_state"]
+    programs_state = components["programs_state"]
+
+    login = components["login"]
+    student = components["student"]
+
+    # ---------------- helpers ----------------
+    def safe_plan_dict(plan: Any) -> Dict[str, Any]:
+        if isinstance(plan, dict):
+            return plan
+        return {"md": plan or "", "profile": {}, "programs": [], "timeline_events": [], "projects": []}
+
+    def parse_resume_code(code: str) -> Tuple[int, str]:
+        code = (code or "").strip()
+        if ":" not in code:
+            return (0, "")
+        a, b = code.split(":", 1)
         try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                print(f"[DATA] Loaded {len(data)} programs from {CACHE_FILE}")
-                return data
-        except Exception as e:
-            print(f"[DATA] Failed to load {CACHE_FILE}: {e}")
-    else:
-        print(f"[DATA] Cache file {CACHE_FILE} not found.")
-    return []
+            return (int(a.strip()), b.strip())
+        except Exception:
+            return (0, "")
 
-all_programs_detailed_data = load_programs()
+    def valid_email(email: str) -> bool:
+        return bool(EMAIL_RE.match((email or "").strip()))
 
-def log_interaction(grade, location, interests, subjects):
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header_needed = not os.path.exists(LOG_FILE)
-    with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if header_needed:
-            writer.writerow(["Timestamp", "Grade", "Location", "Interests", "Subjects"])
-        writer.writerow([ts, grade, location, interests, subjects])
+    def ouac_deadline() -> date:
+        today = date.today()
+        dl = date(today.year, 1, 15)
+        if today > dl:
+            dl = date(today.year + 1, 1, 15)
+        return dl
 
-# ========== EMBEDDING MATCHING ==========
+    def build_fallback_timeline() -> List[Dict[str, Any]]:
+        today = date.today()
+        dl = ouac_deadline()
+        days_left = max(0, (dl - today).days)
+        wk1 = today + timedelta(days=7)
+        wk3 = today + timedelta(days=21)
 
-def get_single_embedding(text):
-    try:
-        resp = genai.embed_content(
-            model="models/text-embedding-004",
-            content=str(text)[:2000],
-            task_type="retrieval_query",
+        # NOTE: renderer may not display "date", so we bake it into title too.
+        return [
+            {"date": today.isoformat(), "title": f"{today.isoformat()} — Start here", "items": [
+                "Confirm your top 6 Grade 12 U/M courses + prerequisites",
+                "Pick 6–10 programs (safe / target / reach)",
+            ]},
+            {"date": wk1.isoformat(), "title": f"{wk1.isoformat()} — Within 7 days", "items": [
+                "Save links + requirements for each shortlisted program",
+                "Start a simple tracker (program, prereqs, admission notes, link)",
+            ]},
+            {"date": wk3.isoformat(), "title": f"{wk3.isoformat()} — Within 3 weeks", "items": [
+                "Build 1 supplementary portfolio piece (project write-up / GitHub / design)",
+                "Draft your activities list (role, dates, impact, proof)",
+            ]},
+            {"date": dl.isoformat(), "title": f"{dl.isoformat()} — OUAC equal consideration (Jan 15) • {days_left} days left", "items": [
+                "Submit for equal consideration",
+                "Double-check supplementary requirements per program",
+            ]},
+        ]
+
+    def build_interest_hint(tags: List[str], details: str) -> str:
+        tags = tags or []
+        d = (details or "").strip().lower()
+        if not tags and not d:
+            return ""
+        base = ", ".join(tags[:4]) if tags else "your interests"
+        lines = [f"**Hint:** Based on {base}, Saarthi will prioritize programs aligned with your pathway."]
+        if "robot" in d or "mechat" in d or "engineering" in " ".join([t.lower() for t in tags]):
+            lines.append("- Consider a robotics/mechatronics portfolio project (1–2 weeks) to strengthen supplementary apps.")
+        if "computer" in " ".join([t.lower() for t in tags]) or "cs" in d:
+            lines.append("- A small GitHub project + short write-up is a big differentiator.")
+        return "\n".join(lines)
+
+    def build_prereq_hint(subjects: List[str], tags: List[str]) -> str:
+        subjects = subjects or []
+        s = " ".join(subjects).lower()
+        t = " ".join(tags or []).lower()
+        missing = []
+        if ("engineering" in t) or ("computer science" in t) or ("math" in t):
+            if "english (eng4u)" not in s:
+                missing.append("English (ENG4U)")
+            if "advanced functions (mhf4u)" not in s:
+                missing.append("Advanced Functions (MHF4U)")
+        if "engineering" in t:
+            if "calculus & vectors (mcv4u)" not in s:
+                missing.append("Calculus & Vectors (MCV4U)")
+            if "physics (sph4u)" not in s:
+                missing.append("Physics (SPH4U)")
+        if missing:
+            return "⚠️ **Possible missing prereqs (common requirements):** " + ", ".join(missing[:6])
+        return "✅ Looks good — your subjects appear aligned with common prerequisites."
+
+    def build_review(grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences):
+        tags_str = ", ".join(tags or []) or "—"
+        subjects_str = ", ".join(subjects or []) or "—"
+        email_line = "No"
+        if wants_email:
+            email_line = f"Yes ({email.strip()})" if valid_email(email) else "Yes (missing/invalid email!)"
+        return (
+            f"**Grade:** {grade}  \n"
+            f"**Average:** {average}%  \n"
+            f"**Location:** {location or '—'}  \n\n"
+            f"**Interests:** {tags_str}  \n"
+            f"**Details:** {(details or '—').strip()}  \n\n"
+            f"**Subjects:** {subjects_str}  \n\n"
+            f"**Extracurriculars:** {(extracurriculars or '—').strip()}  \n"
+            f"**Preferences:** {(preferences or '—').strip()}  \n\n"
+            f"**Email response:** {email_line}"
         )
-        return resp["embedding"]
-    except Exception as e:
-        print("[EMBED] Error:", e)
-        return [0.0] * 768
 
-def find_best_matches(query, data, top_k=10):
-    if not data:
-        return []
-    q_vec = get_single_embedding(query)
-    valid = [p for p in data if p.get("embedding")]
-    if not valid:
-        return data[:top_k]
-    db_vecs = [p["embedding"] for p in valid]
-    try:
-        sims = cosine_similarity([q_vec], db_vecs)[0]
-    except Exception as e:
-        print("[SIM] Error:", e)
-        sims = np.zeros(len(db_vecs))
-    top_indices = np.argsort(sims)[-top_k:][::-1]
-    return [valid[i] for i in top_indices]
+    def set_step(step: int):
+        step = max(1, min(4, int(step)))
+        return (
+            step,
+            gr.update(value=f"**Step {step} of 4**"),
+            gr.update(visible=(step == 1)),
+            gr.update(visible=(step == 2)),
+            gr.update(visible=(step == 3)),
+            gr.update(visible=(step == 4)),
+            gr.update(visible=(step > 1)),
+            gr.update(visible=(step < 4)),
+            gr.update(interactive=(step == 4)),
+        )
 
-def generate_chatbot_response(user_data, relevant_programs):
-    context = ""
-    for p in relevant_programs:
-        context += f"- {p.get('program_name','Unknown')} (Avg: {p.get('admission_average','Not listed')})\n"
-        context += f"  Prereqs: {p.get('prerequisites','Not listed')}\n"
-        context += f"  Link: {p.get('program_url','#')}\n\n"
-
-    prompt = f"""
-Act as 'Saarthi', a wise university guidance counselor.
-STUDENT:
-- Interests: {user_data['interests']}
-- Grade: {user_data['grade']}
-- Avg: {user_data['overall_average']}
-- Courses: {user_data['subjects']}
-- Location: {user_data['location']}
-- Extracurriculars: {user_data['extracurriculars']}
-OPTIONS:
-{context}
-TASK:
-1. **Rank & Recommend:** Recommend the top 10 programs.
-2. **Prerequisite Check:** Compare "Subjects" vs "Prereqs". Warn if missing.
-3. **Fit Analysis:** Explain fit.
-4. **Extracurriculars:** Suggest side projects.
-5. **COMMUTE ANALYSIS:**
-   - Estimate travel time from '{user_data['location']}' to each university.
-   - If > 1 hour, suggest RESIDENCE.
-   - Briefly mention GO Train / gas cost ballpark.
-6. **Tone:** Warm and supportive. Use emojis.
-"""
-    try:
-        return chat.send_message(prompt).text
-    except Exception as e:
-        return f"Error generating response: {e}"
-
-# ========== USER & CHAT STORAGE ==========
-
-def load_users():
-    if not os.path.exists(USER_FILE):
-        with open(USER_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-    try:
-        with open(USER_FILE, "r") as f:
-            content = f.read().strip()
-            if not content:
-                return {}
-            return json.loads(content)
-    except (json.JSONDecodeError, ValueError):
-        print(f"[WARNING] Corrupted {USER_FILE}, resetting...")
-        with open(USER_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-
-def save_users(users):
-    with open(USER_FILE, "w") as f:
-        json.dump(users, f, indent=2)
-
-def load_chats():
-    if not os.path.exists(CHAT_FILE):
-        with open(CHAT_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-    try:
-        with open(CHAT_FILE, "r") as f:
-            content = f.read().strip()
-            if not content:
-                return {}
-            return json.loads(content)
-    except (json.JSONDecodeError, ValueError):
-        print(f"[WARNING] Corrupted {CHAT_FILE}, resetting...")
-        with open(CHAT_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-
-def save_chats(chats):
-    with open(CHAT_FILE, "w") as f:
-        json.dump(chats, f, indent=2)
-
-def register_user(email, password, role):
-    users = load_users()
-    if role != "Student":
-        return "Only students can register."
-    if not email or not password:
-        return "Please provide both email and password."
-    if email in users:
-        return "Email already registered. Please login."
-    users[email] = {"password": password, "role": role}
-    save_users(users)
-    chats = load_chats()
-    chats[email] = []
-    save_chats(chats)
-    return "Registration successful! You can now log in."
-
-def login_user(email, password, role):
-    users = load_users()
-
-    # Admin login
-    if role == "Admin":
-        if password == ADMIN_PASSWORD:
-            student_list = [u for u, v in users.items() if v.get("role") == "Student"]
-            if student_list:
-                student_str = "\n".join(f"- {u}" for u in student_list)
+    def save_generated_plan_compat(submission_id: int, full_md: str, programs: list, timeline_events: list, projects: list):
+        """
+        Backward compatible wrapper for SubmissionStore.save_generated_plan
+        because your store signature may differ across versions.
+        """
+        try:
+            sig = inspect.signature(store.save_generated_plan)
+            # parameters include "self"
+            n = len(sig.parameters)
+            if n >= 6:
+                # self, id, md, programs, timeline, projects
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], timeline_events or [], projects or [])
             else:
-                student_str = "No registered students."
-            admin_content = f"**Registered Students:**\n{student_str}"
-            return (
-                gr.update(visible=False),
-                gr.update(visible=False),
-                gr.update(visible=True),
-                "",
-                "",
-                "Admin logged in.",
-                admin_content,
-            )
-        else:
-            return (
-                gr.update(visible=True),
-                gr.update(visible=False),
-                gr.update(visible=False),
-                "",
-                "",
-                "Invalid admin password.",
-                "",
-            )
+                # self, id, md, programs, phases
+                # reuse phases column for projects
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], projects or [])
+        except Exception:
+            # last resort attempts
+            try:
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], timeline_events or [], projects or [])
+            except Exception:
+                store.save_generated_plan(int(submission_id), full_md or "", programs or [], projects or [])
 
-    # Student login
-    if role == "Student":
-        if email in users and users[email]["password"] == password:
-            chats = load_chats()
-            chat_history = chats.get(email, [])
-            # Build display from chat history
-            display = "Welcome! Generate a roadmap to start."
-            if chat_history:
-                for user_msg, bot_msg in chat_history:
-                    display += f"\n\n---\n\n**You:** {user_msg}\n\n**Saarthi:** {bot_msg}"
-            return (
-                gr.update(visible=False),
-                gr.update(visible=True),
-                gr.update(visible=False),
-                display,
-                email,
-                f"Welcome, {email}!",
-                "",
-            )
-        else:
-            return (
-                gr.update(visible=True),
-                gr.update(visible=False),
-                gr.update(visible=False),
-                "",
-                "",
-                "Invalid email or password.",
-                "",
-            )
-
-# ========== STUDENT CHAT LOGIC ==========
-def student_generate(subjects, interests, extracurriculars, average, grade, location, current_output, user_email):
-    if not user_email:
-        return "Please log in first."
-
-    subjects_str = ", ".join(subjects) if subjects else "None"
-    log_interaction(grade, location, f"{interests} | ECs: {extracurriculars}", subjects_str)
-
-    user_data = {
-        "subjects": subjects_str,
-        "interests": interests,
-        "extracurriculars": extracurriculars,
-        "overall_average": average,
-        "grade": grade,
-        "location": location,
-    }
-
-    matches = find_best_matches(interests or "", all_programs_detailed_data, top_k=10)
-    response = generate_chatbot_response(user_data, matches)
-
-    prompt_summary = (
-        f"Subjects: {subjects_str}\n"
-        f"Interests: {interests}\n"
-        f"Extracurriculars: {extracurriculars}\n"
-        f"Avg: {average}\n"
-        f"Grade: {grade}\n"
-        f"Location: {location}"
-    )
-
-    # Save to chat history
-    chats = load_chats()
-    if user_email not in chats:
-        chats[user_email] = []
-    chats[user_email].append([prompt_summary, response])
-    save_chats(chats)
-
-    # Update display
-    display_text = f"**Your Roadmap Request:**\n{prompt_summary}\n\n**Saarthi Response:**\n{response}"
-    return display_text
-
-def student_followup(message, user_email, current_output):
-    if not message or not user_email:
-        return "", current_output
-
-    # Call Gemini for response
-    try:
-        response = chat.send_message(message).text
-    except Exception as e:
-        response = f"Error: {e}"
-
-    # Save to chat history
-    chats = load_chats()
-    if user_email not in chats:
-        chats[user_email] = []
-    chats[user_email].append([message, response])
-    save_chats(chats)
-
-    # Append to output
-    new_output = f"{current_output}\n\n---\n\n**You:** {message}\n\n**Saarthi:** {response}"
-    return "", new_output
-
-# ========== UI DEFINITION ==========
-with gr.Blocks(title="Saarthi AI") as app:
-    gr.HTML(ghost_css)
-    current_user = gr.State("")
-
-    # Login section
-    with gr.Column() as login_section:
-        gr.Markdown("## Saarthi AI - Login")
-        role_dropdown = gr.Dropdown(choices=["Student", "Admin"], value="Student", label="Select Role")
-        email_input = gr.Textbox(placeholder="Enter your email", label="Email")
-        password_input = gr.Textbox(placeholder="Enter your password", label="Password", type="password")
-        login_msg = gr.Textbox(label="Status", interactive=False)
-        with gr.Row():
-            register_button = gr.Button("Register")
-            login_button = gr.Button("Login")
-
-    # Student section
-    with gr.Column(visible=False) as student_column:
-        gr.Markdown("## Student Guidance")
-        
-        with gr.Row():
-            # Left: Input form
-            with gr.Column(scale=1):
-                gr.Markdown("### Your Profile")
-                inp_subjects = gr.Dropdown(
-                    choices=ALL_COURSES,
-                    multiselect=True,
-                    label="Current Subjects",
-                    info="Search e.g. 'Math', 'SCH4U1'",
-                    allow_custom_value=True,
-                )
-                inp_interests = gr.Textbox(label="Interests", placeholder="e.g. Robotics, Law")
-                inp_extra = gr.Textbox(
-                    label="Extracurriculars",
-                    placeholder="e.g. DECA, Robotics Club, Volunteering",
-                )
-                inp_avg = gr.Textbox(label="Average %")
-                inp_grade = gr.Dropdown(GRADE_OPTIONS, label="Grade")
-                inp_loc = gr.Textbox(label="Location", placeholder="City, ON")
-                gen_button = gr.Button("Generate Roadmap 🚀", variant="primary")
+    def sync_github_status(submission_id: int, desired_label: str, close: bool = False):
+        """Sync submission status to GitHub issue labels"""
+        try:
+            sub = store.admin_get(int(submission_id))
+            if not sub:
+                logger.warning(f"sync_github_status: submission {submission_id} not found")
+                return
+                
+            issue_no = sub.get("github_issue_number")
+            if not issue_no:
+                logger.debug(f"sync_github_status: submission {submission_id} has no GitHub issue")
+                return
+                
+            result = gh.set_issue_status(int(issue_no), desired_label, close=close)
             
-            # Right: Output
-            with gr.Column(scale=2):
-                output_display = gr.Markdown(value="Chat will appear here...")
-                with gr.Row():
-                    msg_input = gr.Textbox(
-                        placeholder="Ask a follow-up question...", label="Follow-up", scale=4
-                    )
-                    send_button = gr.Button("Send Follow-up", scale=1)
+            if result.success:
+                try:
+                    store.set_github_status(int(submission_id), desired_label)
+                except Exception as e:
+                    logger.warning(f"Failed to update local github_status: {e}")
+            else:
+                logger.error(f"Failed to sync GitHub status: {result.error_message}")
+                try:
+                    store.set_github_status(int(submission_id), f"ERROR: {result.error_message[:50]}")
+                except Exception:
+                    pass
+                
+                # Add comment about the failure
+                try:
+                    gh.comment(int(issue_no), f"⚠️ Saarthi failed to set label `{desired_label}`: {result.error_message}")
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.exception(f"sync_github_status failed: {e}")
 
-    # Admin section
-    with gr.Column(visible=False) as admin_column:
-        gr.Markdown("## Admin Dashboard")
-        admin_info = gr.Markdown("")
+    # ---------------- student UX: show/hide email textbox ----------------
+    def on_email_toggle(wants: bool):
+        if wants:
+            return gr.update(visible=True), gr.update(value="📩 You’ll receive an email after team approval.")
+        return gr.update(visible=False, value=""), gr.update(value="")
 
-    # Event handlers
-    def toggle_register(role):
-        return gr.update(visible=(role == "Student"))
-
-    role_dropdown.change(toggle_register, [role_dropdown], [register_button])
-
-    register_button.click(
-        register_user, 
-        [email_input, password_input, role_dropdown], 
-        [login_msg]
+    student["wants_email"].change(
+        fn=on_email_toggle,
+        inputs=[student["wants_email"]],
+        outputs=[student["student_email"], student["email_hint"]],
     )
 
-    login_button.click(
-        login_user,
-        [email_input, password_input, role_dropdown],
-        [login_section, student_column, admin_column, output_display, current_user, login_msg, admin_info],
+    # ---------------- hints ----------------
+    def on_interest_change(tags, details):
+        return gr.update(value=build_interest_hint(tags or [], details or ""))
+
+    student["interest_tags_input"].change(
+        fn=on_interest_change,
+        inputs=[student["interest_tags_input"], student["interest_details_input"]],
+        outputs=[student["interest_hint"]],
+    )
+    student["interest_details_input"].change(
+        fn=on_interest_change,
+        inputs=[student["interest_tags_input"], student["interest_details_input"]],
+        outputs=[student["interest_hint"]],
     )
 
-    gen_button.click(
-        student_generate,
-        [inp_subjects, inp_interests, inp_extra, inp_avg, inp_grade, inp_loc, output_display, current_user],
-        [output_display],
+    def on_subjects_change(subjects, tags):
+        return gr.update(value=build_prereq_hint(subjects or [], tags or []))
+
+    student["subjects_input"].change(
+        fn=on_subjects_change,
+        inputs=[student["subjects_input"], student["interest_tags_input"]],
+        outputs=[student["prereq_hint"]],
     )
+
+    # ---------------- login ----------------
+    def on_start(name: str):
+        hide_login, show_student, welcome_md, sess_id = controllers.handle_start_session(name)
+        return (
+            hide_login,
+            show_student,
+            welcome_md,
+            sess_id,
+            (name or "Student"),
+            gr.update(visible=True),
+            gr.update(visible=False),
+            "inputs",
+            gr.update(value=""),
+        )
+
+    login["start_btn"].click(
+        fn=on_start,
+        inputs=[login["name_input"]],
+        outputs=[
+            login["section"],
+            student["section"],
+            student["output_display"],
+            session_state,
+            name_state,
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["wizard_error"],
+        ],
+    )
+
+    # ---------------- resume: chain properly (NO double click) ----------------
+    def on_resume_from_login(code: str):
+        sid, token = parse_resume_code(code)
+        if not sid or not token:
+            return gr.update(value="❌ Invalid code. Use `id:token`"), gr.update(), gr.update()
+        sub = store.get_by_resume_code(sid, token)
+        if not sub:
+            return gr.update(value="❌ Not found. Check the code again."), gr.update(), gr.update()
+        return (gr.update(value="✅ Loaded saved roadmap."), gr.update(visible=False), gr.update(visible=True))
+
+    def render_resumed(code: str):
+        sid, token = parse_resume_code(code)
+        sub = store.get_by_resume_code(sid, token)
+        if not sub:
+            return (
+                gr.update(visible=True),
+                gr.update(visible=False),
+                "inputs",
+                gr.update(value="❌ Not found."),
+                gr.update(value=""),
+                gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
+                gr.update(value="<div class='card-empty'>No programs yet.</div>"),
+                gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
+                gr.update(value=""),
+                gr.update(value=[]),
+                gr.update(choices=[], value=[]),
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+            )
+
+        sub_u = store.unpack(sub)
+        profile = {
+            "interest": sub_u.get("interests", ""),
+            "grade": sub_u.get("grade", ""),
+            "avg": sub_u.get("average", ""),
+            "subjects": ", ".join((sub_u.get("subjects") or [])[:6]),
+        }
+
+        programs = sub_u.get("ui_programs", []) or []
+        timeline_events = sub_u.get("ui_timeline", []) or build_fallback_timeline()
+        projects = sub_u.get("ui_projects", []) or sub_u.get("ui_phases", []) or []
+
+        timeline_html = render_timeline(profile, timeline_events)
+        programs_html = render_program_cards(programs)
+        checklist_html = render_checklist(projects)
+        full_md = sub_u.get("roadmap_md", "") or ""
+
+        choices = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
+
+        return (
+            gr.update(visible=False),
+            gr.update(visible=True),
+            "outputs",
+            gr.update(value=f"**Resume code:** `{sid}:{token}`"),
+            gr.update(value=f"{sid}:{token}"),
+            timeline_html,
+            programs_html,
+            checklist_html,
+            full_md,
+            gr.update(value=programs),
+            gr.update(choices=choices, value=[]),
+            gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+        )
+
+    resume_evt = login["resume_btn"].click(
+        fn=on_resume_from_login,
+        inputs=[login["resume_code_input"]],
+        outputs=[login["resume_login_status"], login["section"], student["section"]],
+    )
+    resume_evt.then(
+        fn=render_resumed,
+        inputs=[login["resume_code_input"]],
+        outputs=[
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["submission_code_out"],
+            student["resume_code_store"],
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+            programs_state,
+            student["compare_select"],
+            student["compare_table"],
+        ],
+    )
+
+    # ---------------- wizard nav with validation ----------------
+    def on_next(step, grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences):
+        step = int(step)
+
+        if step == 1:
+            if not tags or len(tags) < 1:
+                return (*set_step(1), gr.update(value="❌ Please pick at least 1 Interest Areas."), gr.update())
+            if wants_email and not valid_email(email):
+                return (*set_step(1), gr.update(value="❌ Please enter a valid email address."), gr.update())
+            return (*set_step(2), gr.update(value=""), gr.update())
+
+        if step == 2:
+            if not subjects or len(subjects) == 0:
+                return (*set_step(2), gr.update(value="❌ Please select your current/planned subjects."), gr.update())
+            return (*set_step(3), gr.update(value=""), gr.update())
+
+        if step == 3:
+            base = set_step(4)
+            review = build_review(grade, average, location, tags, details, wants_email, email, subjects, extracurriculars, preferences)
+            return (*base, gr.update(value=""), gr.update(value=review))
+
+        return (*set_step(4), gr.update(value=""), gr.update())
+
+    student["next_btn"].click(
+        fn=on_next,
+        inputs=[
+            student["wizard_step"],
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["wants_email"],
+            student["student_email"],
+            student["subjects_input"],
+            student["extracurriculars_input"],
+            student["preferences_input"],
+        ],
+        outputs=[
+            student["wizard_step"],
+            student["step_label"],
+            student["step1"], student["step2"], student["step3"], student["step4"],
+            student["back_btn"], student["next_btn"],
+            student["generate_btn"],
+            student["wizard_error"],
+            student["review_box"],
+        ],
+    )
+
+    def on_back(step: int):
+        step = max(1, int(step) - 1)
+        return (*set_step(step), gr.update(value=""))
+
+    student["back_btn"].click(
+        fn=on_back,
+        inputs=[student["wizard_step"]],
+        outputs=[
+            student["wizard_step"],
+            student["step_label"],
+            student["step1"], student["step2"], student["step3"], student["step4"],
+            student["back_btn"], student["next_btn"],
+            student["generate_btn"],
+            student["wizard_error"],
+        ],
+    )
+
+    # ---------------- generate ----------------
+    def show_loading():
+        loading_html = """
+        <div class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Generating your personalized roadmap<span class="loading-dots"></span></div>
+            <div class="loading-subtext">Analyzing programs & building your timeline...</div>
+            <div class="loading-progress">
+                <div class="loading-progress-bar"></div>
+            </div>
+        </div>
+        """
+        return (
+            gr.update(value=""),                    # wizard_error - clear any errors
+            gr.update(visible=False),               # inputs_view - hide inputs
+            gr.update(visible=True),                # outputs_view - show outputs area
+            gr.update(value=loading_html, visible=True),  # loading_indicator - show loading
+            gr.update(visible=True),               # dashboard_wrap - hide dashboard while loading
+        )
     
-    msg_input.submit(
-        student_followup,
-        [msg_input, current_user, output_display],
-        [msg_input, output_display],
+    def generate_and_show(
+        grade, average, location,
+        tags, details,
+        subjects, extracurriculars, preferences,
+        wants_email, student_email,
+        sess_id, student_name
+    ):
+        tags = tags or []
+        details = (details or "").strip()
+    
+        if tags and details:
+            interests_str = f"{', '.join(tags)}; Details: {details}"
+        elif tags:
+            interests_str = ", ".join(tags)
+        else:
+            interests_str = details
+    
+        # email validation
+        if wants_email and not valid_email(student_email):
+            return (
+                gr.update(value="❌ Please enter a valid email."),
+                gr.update(value=""),
+                gr.update(value=""),
+                gr.update(visible=True),
+                gr.update(visible=False),
+                "inputs",
+                gr.update(value="", visible=False),
+                gr.update(visible=True),
+                gr.update(value="", visible=False),
+                gr.update(value="<div class='card-empty'>No timeline yet.</div>"),
+                gr.update(value="<div class='card-empty'>No programs yet.</div>"),
+                gr.update(value="<div class='card-empty'>No checklist yet.</div>"),
+                gr.update(value=""),
+                gr.update(value=[]),
+                gr.update(choices=[], value=[]),
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+            )
+    
+        created = store.create_submission({
+            "student_name": student_name or "Student",
+            "student_email": (student_email or "").strip(),
+            "wants_email": bool(wants_email),
+            "grade": grade,
+            "average": float(average),
+            "subjects": subjects or [],
+            "interests": interests_str,
+            "extracurriculars": extracurriculars or "",
+            "location": location or "",
+            "preferences": preferences or "",
+        })
+        resume_code = f"{created['id']}:{created['resume_token']}"
+        note = f"**Resume code:** `{resume_code}`"
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # ✅ ALWAYS generate and save roadmap (even if wants_email is True)
+        # ═══════════════════════════════════════════════════════════════════
+        plan_raw = controllers.handle_generate_roadmap(
+            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
+        )
+        plan = safe_plan_dict(plan_raw)
+    
+        programs = plan.get("programs", []) or []
+        timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
+        projects = plan.get("projects", []) or []
+        full_md = plan.get("md", "") or ""
+    
+        profile = plan.get("profile") or {
+            "interest": interests_str,
+            "grade": grade,
+            "avg": average,
+            "subjects": ", ".join((subjects or [])[:6]),
+        }
+    
+        # ✅ Save generated plan to database (always)
+        save_generated_plan_compat(created["id"], full_md, programs, timeline_events, projects)
+    
+        choices = [
+            f"{p.get('program_name', '')} — {p.get('university_name', '')}".strip(" —")
+            for p in programs[:12]
+        ]
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # If email requested: create GitHub issue, show notice (NOT dashboard)
+        # ═══════════════════════════════════════════════════════════════════
+        if wants_email:
+            github_status_msg = ""
+            
+            if not gh.enabled:
+                github_status_msg = "⚠️ GitHub integration not configured. Admin will need to check manually."
+                logger.warning("GitHubIssuesClient not enabled — check GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO")
+            else:
+                result = gh.create_email_request_issue(
+                    submission_id=created["id"],
+                    resume_code=resume_code,
+                    grade=str(grade),
+                    average=float(average),
+                    interests=interests_str,
+                )
+                
+                if result.success:
+                    try:
+                        store.set_github_issue(
+                            created["id"],
+                            result.issue_number,
+                            result.issue_url or "",
+                            result.assignee or "",
+                            "status:NEW"
+                        )
+                        github_status_msg = f"✅ Tracking issue created: [#{result.issue_number}]({result.issue_url})"
+                    except Exception as e:
+                        logger.exception(f"Failed to save GitHub issue reference: {e}")
+                        github_status_msg = f"✅ Issue #{result.issue_number} created, but failed to save reference."
+                else:
+                    github_status_msg = f"⚠️ Could not create tracking issue: {result.error_message}"
+                    logger.error(f"GitHub issue creation failed: {result.error_type} - {result.error_message}")
+                    
+                    try:
+                        store.set_github_status(created["id"], f"ERROR: {result.error_message[:100]}")
+                    except Exception:
+                        pass
+        
+            notice = (
+                "✅ **Request received!**\n\n"
+                "A team member will review your personalized roadmap and email it to you shortly.\n\n"
+                f"{note}\n\n"
+                f"_{github_status_msg}_"
+            )
+        
+            # Show notice, hide dashboard (but roadmap IS saved in DB for admin)
+            return (
+                gr.update(value=""),                    # wizard_error
+                gr.update(value=note),                  # submission_code_out
+                gr.update(value=resume_code),           # resume_code_store
+                gr.update(visible=False),               # inputs_view
+                gr.update(visible=True),                # outputs_view
+                "outputs",                              # view_state
+                gr.update(value=notice, visible=True),  # email_only_notice
+                gr.update(visible=False),               # dashboard_wrap
+                gr.update(value="", visible=False),     # loading_indicator
+                "",                                     # timeline_display (hidden)
+                "",                                     # programs_display (hidden)
+                "",                                     # checklist_display (hidden)
+                "",                                     # output_display (hidden)
+                gr.update(value=programs),              # programs_state (still store for later)
+                gr.update(choices=choices, value=[]),   # compare_select
+                gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+            )
+    
+        # ═══════════════════════════════════════════════════════════════════
+        # Otherwise: show full dashboard immediately
+        # ═══════════════════════════════════════════════════════════════════
+        timeline_html = render_timeline(profile, timeline_events)
+        programs_html = render_program_cards(programs)
+        checklist_html = render_checklist(projects)
+    
+        return (
+            gr.update(value=""),                 # wizard_error
+            gr.update(value=note),               # submission_code_out
+            gr.update(value=resume_code),        # resume_code_store
+            gr.update(visible=False),            # inputs_view
+            gr.update(visible=True),             # outputs_view
+            "outputs",                           # view_state
+            gr.update(value="", visible=False),  # email_only_notice
+            gr.update(visible=True),             # dashboard_wrap
+            gr.update(value="", visible=False),  # loading_indicator
+            timeline_html,                       # timeline_display
+            programs_html,                       # programs_display
+            checklist_html,                      # checklist_display
+            full_md,                             # output_display
+            gr.update(value=programs),           # programs_state
+            gr.update(choices=choices, value=[]),
+            gr.update(value="<div class='card-empty'>Pick programs to compare.</div>"),
+        )
+        
+    generate_event = student["generate_btn"].click(
+        fn=show_loading,
+        inputs=[],
+        outputs=[
+            student["wizard_error"],
+            student["inputs_view"],
+            student["outputs_view"],
+            student["loading_indicator"],  # Add this component
+            student["dashboard_wrap"],
+        ],
+    ).then(
+        fn=generate_and_show,
+        inputs=[
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["subjects_input"],
+            student["extracurriculars_input"],
+            student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
+            session_state,
+            name_state,
+        ],
+        outputs=[
+            student["wizard_error"],
+            student["submission_code_out"],
+            student["resume_code_store"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["email_only_notice"],
+            student["dashboard_wrap"],
+            student["loading_indicator"],  # Add this to hide loading when done
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+            programs_state,
+            student["compare_select"],
+            student["compare_table"],
+        ],
     )
-    send_button.click(
-        student_followup,
-        [msg_input, current_user, output_display],
-        [msg_input, output_display],
+    '''
+    student["generate_btn"].click(
+        fn=generate_and_show,
+        inputs=[
+            student["grade_input"],
+            student["average_input"],
+            student["location_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["subjects_input"],
+            student["extracurriculars_input"],
+            student["preferences_input"],
+            student["wants_email"],
+            student["student_email"],
+            session_state,
+            name_state,
+        ],
+        outputs=[
+            student["wizard_error"],
+            student["submission_code_out"],
+            student["resume_code_store"],
+            student["inputs_view"],
+            student["outputs_view"],
+            view_state,
+            student["email_only_notice"],
+            student["dashboard_wrap"],
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+            programs_state,
+            student["compare_select"],
+            student["compare_table"],
+        ],
     )
+    '''
+    # ---------------- back to inputs ----------------
+    def go_edit_inputs():
+        return gr.update(visible=True), gr.update(visible=False), "inputs"
+
+    student["edit_inputs_btn"].click(
+        fn=go_edit_inputs,
+        inputs=[],
+        outputs=[student["inputs_view"], student["outputs_view"], view_state],
+    )
+
+    # ---------------- clear form ----------------
+    student["clear_btn"].click(
+        fn=controllers.handle_clear_form,
+        inputs=[],
+        outputs=[
+            student["subjects_input"],
+            student["interest_tags_input"],
+            student["interest_details_input"],
+            student["extracurriculars_input"],
+            student["average_input"],
+            student["grade_input"],
+            student["location_input"],
+            student["preferences_input"],
+        ],
+    )
+
+    # ---------------- compare tab ----------------
+    def render_compare(selected: List[str], programs: List[Dict[str, Any]]):
+        if not selected:
+            return "<div class='card-empty'>Pick programs to compare.</div>"
+
+        labels = [f"{p.get('program_name','')} — {p.get('university_name','')}".strip(" —") for p in programs[:12]]
+        pick = []
+        for s in selected[:4]:
+            if s in labels:
+                pick.append(programs[labels.index(s)])
+
+        if not pick:
+            return "<div class='card-empty'>Pick programs to compare.</div>"
+
+        rows = []
+        for p in pick:
+            rows.append(f"""
+            <tr>
+              <td>{p.get('program_name','')}</td>
+              <td>{p.get('university_name','')}</td>
+              <td>{p.get('match_percent',0)}%</td>
+              <td>{"✅" if p.get("co_op_available") else "—"}</td>
+              <td>{p.get('prerequisites','')}</td>
+              <td>{p.get('admission_average','')}</td>
+            </tr>
+            """)
+
+        return f"""
+        <div class="table-wrap">
+          <table class="cmp">
+            <thead>
+              <tr><th>Program</th><th>University</th><th>Match</th><th>Co-op</th><th>Prereqs</th><th>Admission</th></tr>
+            </thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>
+        </div>
+        """
+
+    student["compare_select"].change(
+        fn=render_compare,
+        inputs=[student["compare_select"], programs_state],
+        outputs=[student["compare_table"]],
+    )
+
+    # ---------------- follow-up ----------------
+    def followup(question, current_md, sess_id):
+        cleared_q, new_md = controllers.handle_followup(question, current_md, sess_id)
+        return cleared_q, gr.update(), gr.update(), gr.update(), new_md
+
+    student["send_btn"].click(
+        fn=followup,
+        inputs=[student["followup_input"], student["output_display"], session_state],
+        outputs=[
+            student["followup_input"],
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+        ],
+    )
+    student["followup_input"].submit(
+        fn=followup,
+        inputs=[student["followup_input"], student["output_display"], session_state],
+        outputs=[
+            student["followup_input"],
+            student["timeline_display"],
+            student["programs_display"],
+            student["checklist_display"],
+            student["output_display"],
+        ],
+    )
+
+    # =========================
+    # ADMIN (approval workflow)
+    # =========================
+    def admin_unlock(pin: str):
+        expected = getattr(config, "ADMIN_PIN", "") or ""
+        if not expected:
+            return gr.update(value="⚠️ ADMIN_PIN not set in config/env."), gr.update(visible=False)
+        if (pin or "").strip() != expected:
+            return gr.update(value="❌ Wrong PIN."), gr.update(visible=False)
+        return gr.update(value="✅ Admin unlocked."), gr.update(visible=True)
+
+    student["admin_login_btn"].click(
+        fn=admin_unlock,
+        inputs=[student["admin_pin"]],
+        outputs=[student["admin_status"], student["admin_section"]],
+    )
+
+    def refresh_queue(status_filter: str, query: str):
+        rows = store.list_queue(status_filter=status_filter, query=query, limit=200)
+        return [[r["id"], r["created_at"], r["student_name"], r["student_email"], r["status"]] for r in rows]
+
+    student["refresh_queue_btn"].click(
+        fn=refresh_queue,
+        inputs=[student["status_filter"], student["search_query"]],
+        outputs=[student["queue_table"]],
+    )
+
+    def open_next():
+        nxt = store.get_next_pending()
+        if not nxt:
+            return gr.update(value="✅ No pending items."), gr.update(value=None)
+        return gr.update(value=f"Loaded next pending: #{nxt['id']}"), gr.update(value=float(nxt["id"]))
+
+    student["open_next_btn"].click(
+        fn=open_next,
+        inputs=[],
+        outputs=[student["admin_status"], student["review_id"]],
+    )
+
+    def admin_load(submission_id: float):
+        if submission_id is None:
+            return "", "", "", "", [], []
+
+        sub = store.admin_get(int(submission_id))
+        if not sub:
+            return "❌ Not found.", "", "", "", [], []
+
+        sub_u = store.unpack(sub)
+
+        plan_md = sub_u.get("roadmap_md", "") or ""
+        subj = sub_u.get("email_subject", "") or ""
+        body = sub_u.get("email_body_text", "") or ""
+
+        email = (sub_u.get("student_email") or "").strip()
+        mailto = ""
+        if email:
+            import urllib.parse
+            mailto = (
+                f"<a target='_blank' href='mailto:{urllib.parse.quote(email)}"
+                f"?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}'>Open email draft in mail client</a>"
+            )
+
+        actions = store.get_actions(int(submission_id), limit=200)
+        actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
+
+        return plan_md, subj, body, (mailto or ""), actions_table, actions_table
+
+    student["load_btn"].click(
+        fn=admin_load,
+        inputs=[student["review_id"]],
+        outputs=[student["admin_plan_md"], student["email_subject"], student["email_body"], student["gmail_helper"], student["actions_table"], student["actions_table"]],
+    )
+
+    def admin_autofill(submission_id: float, admin_name: str):
+        sub = store.admin_get(int(submission_id))
+        if not sub:
+            return "", "", "❌ Not found.", []
+
+        sub_u = store.unpack(sub)
+
+        # If roadmap not generated yet (email-request flow), generate now (admin-triggered)
+        if not (sub_u.get("roadmap_md") or "").strip():
+            try:
+                subjects = sub_u.get("subjects", []) or []
+                interests = sub_u.get("interests", "") or ""
+                extracurriculars = sub_u.get("extracurriculars", "") or ""
+                average = sub_u.get("average", 0) or 0
+                grade = sub_u.get("grade", "") or ""
+                location = sub_u.get("location", "") or ""
+                preferences = sub_u.get("preferences", "") or ""
+
+                plan_raw = controllers.handle_generate_roadmap(
+                    subjects, interests, extracurriculars, average, grade, location, preferences, ""
+                )
+                plan = safe_plan_dict(plan_raw)
+
+                programs = plan.get("programs", []) or []
+                timeline_events = plan.get("timeline_events", []) or build_fallback_timeline()
+                projects = plan.get("projects", []) or []
+                full_md = plan.get("md", "") or ""
+
+                save_generated_plan_compat(int(submission_id), full_md, programs, timeline_events, projects)
+                sub = store.admin_get(int(submission_id))
+                sub_u = store.unpack(sub) if sub else sub_u
+                sync_github_status(int(submission_id), "status:GENERATED", close=False)
+            except Exception:
+                logger.exception("Admin-triggered roadmap generation failed")
+
+        email = build_email_from_submission(sub_u)
+
+        token = f"SRT-{sub_u.get('id')}"
+        subject = (email.get("subject") or "Your Saarthi Roadmap").strip()
+        if token not in subject:
+            subject = f"{subject} [{token}]"
+
+        body = email.get("body_text") or ""
+        actor = (admin_name or "").strip() or "admin"
+
+        store.admin_save_email(int(submission_id), subject, body, actor=actor)
+        sync_github_status(int(submission_id), "status:DRAFTED", close=False)
+        store.log_action(int(submission_id), actor, "AUTOFILL_EMAIL", "Generated email draft")
+
+        actions = store.get_actions(int(submission_id), limit=200)
+        actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
+        return subject, body, "✅ Auto-filled + saved.", actions_table
+
+    student["autofill_email_btn"].click(
+        fn=admin_autofill,
+        inputs=[student["review_id"], student["admin_name"]],
+        outputs=[student["email_subject"], student["email_body"], student["admin_status"], student["actions_table"]],
+    )
+
+    def admin_save(submission_id: float, subject: str, body: str, admin_name: str):
+        actor = (admin_name or "").strip() or "admin"
+        store.admin_save_email(int(submission_id), subject or "", body or "", actor=actor)
+        sync_github_status(int(submission_id), "status:DRAFTED", close=False)
+        store.log_action(int(submission_id), actor, "SAVE_EMAIL", "Saved email draft edits")
+
+        actions = store.get_actions(int(submission_id), limit=200)
+        actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
+        return "✅ Draft saved.", actions_table
+
+    student["save_email_btn"].click(
+        fn=admin_save,
+        inputs=[student["review_id"], student["email_subject"], student["email_body"], student["admin_name"]],
+        outputs=[student["admin_status"], student["actions_table"]],
+    )
+
+    def admin_mark_sent(submission_id: float, admin_name: str):
+        actor = (admin_name or "").strip() or "admin"
+        store.admin_mark_sent(int(submission_id), actor=actor)
+        sync_github_status(int(submission_id), "status:SENT", close=True)
+        store.log_action(int(submission_id), actor, "MARK_SENT", "Marked as sent")
+
+        actions = store.get_actions(int(submission_id), limit=200)
+        actions_table = [[a["created_at"], a["actor"], a["action"], a["details"]] for a in actions]
+        return "✅ Marked as SENT.", actions_table
+
+    student["mark_sent_btn"].click(
+        fn=admin_mark_sent,
+        inputs=[student["review_id"], student["admin_name"]],
+        outputs=[student["admin_status"], student["actions_table"]],
+    )
+
+    def run_github_diagnostics():
+        from services.github_issues import diagnose_github_config
+        return gr.update(value=diagnose_github_config())
+    
+    student["github_diag_btn"].click(
+        fn=run_github_diagnostics,
+        inputs=[],
+        outputs=[student["github_diag_output"]],
+    )
+
+    # Startup diagnostics
+    def run_startup_checks():
+        """Run diagnostics on startup"""
+        logger.info("=" * 60)
+        logger.info("SAARTHI AI — STARTUP DIAGNOSTICS")
+        logger.info("=" * 60)
+        
+        # Check Gemini API
+        if config.GEMINI_API_KEY:
+            logger.info("✅ Gemini API: Configured")
+        else:
+            logger.warning("⚠️ Gemini API: Not configured (will use demo mode)")
+        
+        # Check GitHub
+        if gh.enabled:
+            result = gh.test_connection()
+            if result.success:
+                logger.info(f"✅ GitHub API: Connected to {gh.owner}/{gh.repo}")
+            else:
+                logger.error(f"❌ GitHub API: {result.error_message}")
+        else:
+            logger.warning("⚠️ GitHub API: Not configured (email workflow disabled)")
+        
+        # Check database
+        try:
+            count = len(store.list_queue(limit=1))
+            logger.info(f"✅ Database: Connected ({store.db_path})")
+        except Exception as e:
+            logger.error(f"❌ Database: {e}")
+        
+        # Check programs
+        try:
+            prog_count = controllers.program_search.program_count
+            has_embeddings = controllers.program_search.has_embeddings
+            logger.info(f"✅ Programs: {prog_count} loaded ({'with' if has_embeddings else 'without'} embeddings)")
+        except Exception as e:
+            logger.error(f"❌ Programs: {e}")
+        
+        logger.info("=" * 60)
+    
+    
+    # Run checks on module load
+    run_startup_checks()
 
 if __name__ == "__main__":
-    app.launch()
+    app = create_app()
+    app.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        show_error=True,
+        css=getattr(app, "_saarthi_css", None),
+        theme=getattr(app, "_saarthi_theme", None),
+    )

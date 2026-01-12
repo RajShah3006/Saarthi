@@ -3,14 +3,10 @@ name: Sync Hugging Face Space -> space-sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
+    - cron: "*/15 * * * *"   # every 15 minutes (change if you want)
 
 permissions:
   contents: write
-
-concurrency:
-  group: hf-space-sync
-  cancel-in-progress: true
 
 jobs:
   sync:
@@ -27,63 +23,33 @@ jobs:
           git config user.name "HF Sync Bot"
           git config user.email "hf-sync-bot@users.noreply.github.com"
 
-      - name: Get latest Hugging Face HEAD SHA (no clone)
-        id: hfsha
+      - name: Clone Hugging Face Space repo (public)
         run: |
           set -e
-          HF_URL="https://huggingface.co/spaces/RajShah13/Saarthi"
-          HF_SHA="$(git ls-remote "$HF_URL" HEAD | awk '{print $1}')"
-          echo "hf_sha=$HF_SHA" >> "$GITHUB_OUTPUT"
-          echo "Latest HF SHA: $HF_SHA"
+          git clone https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
+          rm -rf /tmp/hfspace/.git
 
       - name: Switch to space-sync branch
         run: |
           set -e
           git checkout space-sync || git checkout -b space-sync
 
-      - name: Skip if no changes since last sync
-        run: |
-          set -e
-          HF_SHA="${{ steps.hfsha.outputs.hf_sha }}"
-          LAST_SHA_FILE=".hf_last_synced_sha"
-
-          if [ -f "$LAST_SHA_FILE" ]; then
-            LAST_SHA="$(cat "$LAST_SHA_FILE" | tr -d '\n' | tr -d '\r')"
-            echo "Last synced SHA: $LAST_SHA"
-            if [ "$LAST_SHA" = "$HF_SHA" ]; then
-              echo "No new commits on Hugging Face. Skipping sync."
-              exit 0
-            fi
-          else
-            echo "No last SHA file found (first run). Will sync."
-          fi
-
-      - name: Clone Hugging Face Space repo (depth 1)
-        run: |
-          set -e
-          rm -rf /tmp/hfspace
-          git clone --depth 1 https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
-          rm -rf /tmp/hfspace/.git
-
       - name: Replace branch contents with Space contents
         run: |
           set -e
 
-          # Remove everything except .git and .github (keeps workflow files)
+          # Remove everything except .git and .github (keeps workflow file)
           find . -mindepth 1 -maxdepth 1 \
             ! -name ".git" \
             ! -name ".github" \
             -exec rm -rf {} +
 
-          # Copy Space files in
+          # Copy Space files in (no LFS)
           rsync -av /tmp/hfspace/ . \
             --exclude "__pycache__" \
             --exclude ".cache" \
             --exclude ".gradio" \
             --exclude "*.log"
-
-          # Write/update last synced SHA marker
-          echo "${{ steps.hfsha.outputs.hf_sha }}" > .hf_last_synced_sha
 
       - name: Commit & push (only if changes)
         run: |
@@ -91,9 +57,9 @@ jobs:
           git add -A
 
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No changes to sync."
             exit 0
           fi
 
-          git commit -m "Auto-sync from Hugging Face Space (${{ steps.hfsha.outputs.hf_sha }})"
+          git commit -m "Auto-sync from Hugging Face Space"
           git push origin space-sync
