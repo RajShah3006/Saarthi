@@ -100,41 +100,79 @@
 
 ### Multi-Factor Program Scoring
 
-The search engine combines five scoring factors with configurable weights:
+The `ProgramSearchService` class implements a **weighted linear combination** scoring system:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
-| **Relevance** | 35% | Keyword matching and academic field alignment with penalty for irrelevant programs |
-| **Embedding Similarity** | 25% | Cosine similarity between query and program embeddings (768 dimensions) |
-| **Grade Fit** | 20% | Sigmoid-based probability of admission acceptance |
-| **Prerequisites** | 15% | Match rate between student's courses and program requirements |
-| **Location** | 5% | Geographic preference matching (GTA, regional, Ontario-wide) |
+| **Relevance Score** | 35% | `_calculate_relevance_score()` - Keyword matching against `FIELD_KEYWORDS` dictionary with **quadratic suppression** for irrelevant programs |
+| **Embedding Similarity** | 25% | `_calculate_embedding_scores()` - Cosine similarity via **normalized dot product** against embedding matrix |
+| **Grade Fit** | 20% | `_calculate_grade_score()` - **Sigmoid transformation** (`_sigmoid()` with k=0.25) of grade delta |
+| **Prerequisites** | 15% | `_calculate_prerequisite_score()` - Course pattern matching for Ontario curriculum codes (MCV4U, MHF4U, etc.) |
+| **Location** | 5% | `_calculate_location_score()` - GTA region detection and Ontario-wide matching |
 
-Programs with relevance below 10% are filtered out. Low-relevance programs (below 30%) receive additional quadratic suppression.
+**Key Technical Terms:**
+- **FIELD_KEYWORDS**: Dictionary mapping 25+ academic fields (robotics, AI, business, medicine, etc.) to related keywords
+- **GARBAGE_STRINGS**: List of common scraping artifacts removed via `_clean_prerequisites()`
+- **Quadratic Suppression**: Programs with relevance < 30% receive `score *= relevance` penalty
+- **Competitive Bonus**: Programs marked competitive where student qualifies get `score * 1.1`
 
 ### Semantic Search via Embeddings
 
-- **Model:** Google Gemini text-embedding-004 (768 dimensions)
-- **Corpus:** 2000+ Ontario university programs with pre-computed embeddings
-- **Query Processing:** Student interests and extracurriculars are embedded at runtime
-- **Similarity:** Vectorized dot product against normalized embedding matrix
-- **Caching:** LRU cache for query embeddings to reduce API calls
+The system uses **retrieval_query** task type for query embedding and **retrieval_document** for corpus:
 
-### Typo Tolerance & Fuzzy Matching
+- **Model:** `models/text-embedding-004` (Google Gemini)
+- **Embedding Matrix:** NumPy array of shape `(num_programs, 768)` built at startup
+- **Normalization:** Query and program vectors normalized to unit length before dot product
+- **Similarity Formula:** `max(0, dot(query_norm, prog_norm))` with final normalization
 
-- Dictionary of 40+ common misspellings with corrections
-- Fuzzy string matching using SequenceMatcher (threshold: 0.75)
-- Expanded keyword dictionaries for 25+ academic fields including space, robotics, and health sciences
+### Grade Scoring Algorithm
 
-### Grade Scoring
+The `_parse_admission_average()` method handles various admission formats:
 
-- Parses admission averages from text (ranges, "below X%", "competitive", etc.)
-- Sigmoid transformation converts grade delta to probability score
-- Assessment labels: Safe (+10%), Good (+5%), Target (0%), Reach (-5%), Long Shot (below -5%)
+| Input Pattern | Parsing Logic |
+|--------------|---------------|
+| "Below 75%" / "Under 75%" | Extract number, subtract 5 (easy admission) |
+| "85-90%" (range) | Calculate average of low and high |
+| "85%" (single) | Direct extraction |
+| "Competitive" / "High" | Default to 90% |
+| "Mid 80s" / "Low 80s" | Mapped to 85% / 80% |
+
+**Assessment Labels:**
+| Grade Delta | Assessment |
+|-------------|------------|
+| ≥ +10% | Safe 🟢 |
+| ≥ +5% | Good 🟢 |
+| ≥ 0% | Target 🟡 |
+| ≥ -5% | Reach 🟠 |
+| < -5% | Long Shot 🔴 |
+
+### Typo Tolerance & Field Detection
+
+- **FIELD_KEYWORDS Dictionary:** Maps fields like "robotics" → ["robotics", "mechatronics", "automation", "mechanical", "electrical", "control", "embedded"]
+- **Fuzzy Matching:** SequenceMatcher with 0.75 threshold
+- **Interest Word Bonus:** Direct matches of interest words in program name add +0.5 to score
+
+### RAG Pipeline (Retrieval-Augmented Generation)
+
+The `RoadmapService` orchestrates the RAG pipeline:
+
+1. **Retrieval:** `search_with_profile()` returns top-K programs with breakdown dictionaries
+2. **Context Assembly:** `PromptTemplates.roadmap_prompt()` formats profile + programs
+3. **System Prompt:** `roadmap_system_prompt()` sets rules (no fabrication, verify on link, etc.)
+4. **Generation:** `LLMClient.generate()` with `@retry_with_backoff` decorator (3 attempts, exponential delay)
+5. **Formatting:** `_format_output()` generates styled markdown with match icons
+
+### LLM Client Architecture
+
+The `LLMClient` class implements **graceful degradation**:
+
+- **API Detection:** Tries `google-genai` (new API) first, falls back to `google-generativeai` (legacy)
+- **Retry Logic:** `@retry_with_backoff(max_retries=3, base_delay=1.0)` decorator with exponential backoff
+- **Demo Mode:** Static responses when `GEMINI_API_KEY` not configured
 
 ### Timeline Generation
 
-- Anchors all milestones to OUAC equal consideration deadline (January 15)
+- Anchors all milestones to **OUAC equal consideration deadline** (January 15)
 - Generates date-specific action items working backwards from deadline
 - Interest-specific project checklists (robotics portfolio, CS app, research brief)
 
@@ -181,29 +219,49 @@ Saarthi/
 ## 🔧 Services & Modules
 
 ### LLM Client (`services/llm_client.py`)
-- Wraps Google Gemini API with automatic retry (3 attempts, exponential backoff)
-- Auto-detects API version (google-genai vs google-generativeai)
-- Demo mode fallback when API key is not configured
+- **Class:** `LLMClient` with `@retry_with_backoff` decorator
+- **API Detection:** Auto-detects `google-genai` vs `google-generativeai`
+- **Retry Logic:** Exponential backoff (base_delay=1.0, max_retries=3)
+- **Fallback:** `_demo_response()` provides static responses in demo mode
 
 ### Program Search (`services/program_search.py`)
-- Main class: `ProgramSearchService`
-- Loads program database and builds embedding matrix at startup
-- Implements relevance scoring, grade fitting, prerequisite matching, and location preferences
-- Filters and ranks programs using weighted linear combination
+- **Class:** `ProgramSearchService`
+- **Data Structures:**
+  - `FIELD_KEYWORDS`: Dict mapping 25+ fields to keyword lists
+  - `GARBAGE_STRINGS`: List of scraping artifacts to remove
+  - `embedding_matrix`: NumPy array shape `(n_programs, 768)`
+- **Key Methods:**
+  - `_calculate_relevance_score()`: Keyword matching with field detection
+  - `_calculate_grade_score()`: Sigmoid transformation + assessment labels
+  - `_calculate_prerequisite_score()`: Ontario course pattern matching
+  - `_calculate_embedding_scores()`: Vectorized cosine similarity
+  - `_calculate_final_score()`: Weighted combination with filtering
 
 ### Roadmap Service (`services/roadmap.py`)
-- Main class: `RoadmapService`
-- Orchestrates RAG pipeline: search → context assembly → LLM generation → formatting
-- Builds timeline events anchored to OUAC deadline
-- Generates interest-specific project checklists
+- **Class:** `RoadmapService`
+- **Orchestration:** search → context assembly → LLM generation → formatting
+- **Output Format:** Styled markdown with match icons (🌟, ✅, 🔶, ⚪)
+- **Timeline:** OUAC-anchored milestones with date-specific actions
+
+### Domain Models (`models.py`)
+- **Program:** Dataclass with `embedding: List[float]`, `search_text`, `co_op_available`
+- **StudentProfile:** Validated profile with `to_context_string()` for prompts
+- **Session:** UUID-based with TTL validation via `is_valid(timeout_minutes)`
+- **ServiceResult:** Result wrapper with `ok`, `message`, `data`, `error_id`
+
+### Prompt Templates (`prompts/templates.py`)
+- **Class:** `PromptTemplates`
+- **System Prompts:** `roadmap_system_prompt()`, `followup_system_prompt()`
+- **Rules:** No fabrication, verify on link, 6-12 bullets max
+- **Formatting:** `_format_programs()` for RAG context injection
 
 ### Submissions Store (`services/submissions_store.py`)
 - SQLite database with auto-migration for schema changes
-- Tables: submissions (profile + generated outputs), submission_actions (audit log)
-- Supports email workflow with status tracking (NEW → GENERATED → IN_REVIEW → SENT)
+- Tables: `submissions` (profile + outputs), `submission_actions` (audit log)
+- Status workflow: NEW → GENERATED → IN_REVIEW → SENT
 
 ### GitHub Issues (`services/github_issues.py`)
-- Creates tracking issues for email requests (public-repo safe, no PII in issue body)
+- Creates tracking issues for email requests (public-repo safe, no PII)
 - Round-robin assignee selection
 - Status label management and issue closing
 
