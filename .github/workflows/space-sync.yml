@@ -16,6 +16,7 @@ jobs:
       - name:  Checkout GitHub repo
         uses:  actions/checkout@v4
         with:
+          ref: space-sync
           fetch-depth:  0
           token: ${{ secrets. GITHUB_TOKEN }}
 
