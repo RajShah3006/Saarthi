@@ -28,7 +28,7 @@ jobs:
       - name: Clone Hugging Face Space repo (public)
         run: |
           set -e
-          git clone https://huggingface.co/spaces/RajShah13/Saarthi/tmp/hfspace
+          git clone https://huggingface.co/spaces/RajShah13/Saarthi
           rm -rf /tmp/hfspace/.git
 
       - name: Replace branch contents with Space contents
