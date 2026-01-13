@@ -57,7 +57,7 @@ jobs:
             exit 0
           fi
           git commit -m "Auto-sync from Hugging Face Space"
-          git push -u origin space-sync
+          git push -force origin space-sync
           git clone https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
           rm -rf /tmp/hfspace/.git
 
