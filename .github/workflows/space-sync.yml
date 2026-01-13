@@ -1,9 +1,9 @@
 name: Sync Hugging Face Space -> space-sync
 
-on:
+on: 
   workflow_dispatch:
   schedule:
-    - cron: "*/60 * * * *"   # every 15 minutes (change if you want)
+    - cron:  "0 * * * *"
 
 permissions:
   contents: write
@@ -13,19 +13,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitHub repo
-        uses: actions/checkout@v4
+      - name:  Checkout GitHub repo
+        uses:  actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth:  0
+          token: ${{ secrets. GITHUB_TOKEN }}
 
       - name: Configure git user
-        run: |
+        run:  |
           git config user.name "HF Sync Bot"
-          git config user.email "hf-sync-bot@users.noreply.github.com"
+          git config user.email "hf-sync-bot@users. noreply.github.com"
 
       - name: Clone Hugging Face Space repo (public)
         run: |
           set -e
+          git clone https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
+          rm -rf /tmp/hfspace/.git
+
+      - name: Switch to space-sync branch
+        run: |
+          set -e
+          git checkout space-sync || git checkout -b space-sync
+
+      - name: Replace branch contents with Space contents
+        run:  |
+          set -e
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name ".git" \
+            ! -name ". github" \
+            -exec rm -rf {} +
+          rsync -av /tmp/hfspace/ . \
+            --exclude "__pycache__" \
+            --exclude ".cache" \
+            --exclude ".gradio" \
+            --exclude "*. log"
+
+      - name:  Commit & push (only if changes)
+        run: |
+          set -e
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to sync."
+            exit 0
+          fi
+          git commit -m "Auto-sync from Hugging Face Space"
+          git push -u origin space-sync
           git clone https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
           rm -rf /tmp/hfspace/.git
 
