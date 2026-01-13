@@ -1,24 +1,22 @@
 name: Sync Hugging Face Space -> space-sync
 
-on: 
+on:
   workflow_dispatch:
   schedule:
-    - cron:  "0 * * * *"
+    - cron: "0 * * * *"   # every hour (change if you want)
 
 permissions:
   contents: write
 
 jobs:
-  sync: 
+  sync:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout GitHub repo
         uses: actions/checkout@v4
         with:
-          ref: space-sync
-          fetch-depth:  0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Configure git user
         run: |
@@ -28,16 +26,25 @@ jobs:
       - name: Clone Hugging Face Space repo (public)
         run: |
           set -e
-          git clone https://huggingface.co/spaces/RajShah13/Saarthi
+          git clone https://huggingface.co/spaces/RajShah13/Saarthi /tmp/hfspace
           rm -rf /tmp/hfspace/.git
+
+      - name: Switch to space-sync branch
+        run: |
+          set -e
+          git checkout space-sync || git checkout -b space-sync
 
       - name: Replace branch contents with Space contents
         run: |
           set -e
+
+          # Remove everything except .git and .github (keeps workflow file)
           find . -mindepth 1 -maxdepth 1 \
             ! -name ".git" \
             ! -name ".github" \
             -exec rm -rf {} +
+
+          # Copy Space files in (no LFS)
           rsync -av /tmp/hfspace/ . \
             --exclude "__pycache__" \
             --exclude ".cache" \
@@ -48,12 +55,10 @@ jobs:
         run: |
           set -e
           git add -A
+
           if git diff --cached --quiet; then
             echo "No changes to sync."
             exit 0
-          fi
-          git commit -m "Auto-sync from Hugging Face Space"
-          git push --force origin space-sync
           fi
 
           git commit -m "Auto-sync from Hugging Face Space"
