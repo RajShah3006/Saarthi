@@ -43,25 +43,56 @@
 
 ## 🏗 System Architecture
 
-### Layer Overview
+### High-Level Overview
 
-The application follows a 5-layer architecture:
+```
+┌────────────────────────────────────────────────────────────────┐
+│                      PRESENTATION LAYER                         │
+│         index.html (GitHub Pages) + Gradio (HF Spaces)         │
+└────────────────────────────────────────────────────────────────┘
+                              ↓
+┌────────────────────────────────────────────────────────────────┐
+│                      APPLICATION LAYER                          │
+│              app.py (Gradio) + api_server.py (FastAPI)         │
+└────────────────────────────────────────────────────────────────┘
+                              ↓
+┌────────────────────────────────────────────────────────────────┐
+│                       CONTROLLER LAYER                          │
+│                        controllers.py                           │
+└────────────────────────────────────────────────────────────────┘
+                              ↓
+┌────────────────────────────────────────────────────────────────┐
+│                        SERVICE LAYER                            │
+│   llm_client │ program_search │ roadmap │ session │ storage    │
+└────────────────────────────────────────────────────────────────┘
+                              ↓
+┌────────────────────────────────────────────────────────────────┐
+│                         DATA LAYER                              │
+│            programs.json (embeddings) + SQLite DB              │
+└────────────────────────────────────────────────────────────────┘
+```
 
-1. **Presentation Layer** - Static landing page (GitHub Pages) with iframe embedding to Gradio app (Hugging Face Spaces)
-2. **Application Layer** - Gradio Blocks UI with event handlers and FastAPI REST endpoints
-3. **Controller Layer** - Input validation, service orchestration, and response assembly
-4. **Service Layer** - Business logic including LLM client, semantic search, roadmap generation, and persistence
-5. **Data Layer** - Program database with pre-computed embeddings and SQLite for submissions
+### Layer Details
+
+| Layer | Components | Responsibility |
+|-------|------------|----------------|
+| **Presentation** | `index.html`, Gradio Blocks | Static landing page (GitHub Pages) + Interactive wizard UI (HF Spaces) |
+| **Application** | `app.py`, `api_server.py` | Gradio event wiring, FastAPI REST endpoints |
+| **Controller** | `controllers.py` | Input validation, service orchestration, response assembly |
+| **Service** | `services/` directory | LLM client, semantic search, roadmap generation, persistence |
+| **Data** | `programs.json`, SQLite | Program database with embeddings, submission storage |
 
 ### Request Flow
 
-1. User submits profile through 4-step wizard (interests, academics, extracurriculars, review)
-2. Input validation sanitizes and checks all fields
-3. Semantic search engine finds top-10 matching programs using multi-factor scoring
-4. RAG pipeline assembles context from matched programs + student profile
-5. LLM generates personalized analysis based on retrieved facts only
-6. Timeline and checklist are generated based on interest area and OUAC deadlines
-7. Dashboard renders program cards, timeline, checklist, and full markdown plan
+| Step | Action | Component |
+|------|--------|-----------|
+| 1 | User submits profile through 4-step wizard | Gradio UI |
+| 2 | Input validation sanitizes all fields | `validators.py` |
+| 3 | Semantic search finds top-10 matching programs | `program_search.py` |
+| 4 | RAG assembles context from programs + profile | `roadmap.py` |
+| 5 | LLM generates personalized analysis | `llm_client.py` |
+| 6 | Timeline and checklist generated | `roadmap.py` |
+| 7 | Dashboard renders all components | `dashboard_renderer.py` |
 
 ---
 
