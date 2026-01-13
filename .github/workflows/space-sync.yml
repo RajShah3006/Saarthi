@@ -1,9 +1,9 @@
 name: Sync Hugging Face Space -> space-sync
 
-on:
+on: 
   workflow_dispatch:
   schedule:
-    - cron: "*/60 * * * *"   # every 15 minutes (change if you want)
+    - cron: "0 * * * *"   # every hour (use "*/15 * * * *" for every 15 minutes)
 
 permissions:
   contents: write
@@ -13,15 +13,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitHub repo
-        uses: actions/checkout@v4
+      - name:  Checkout GitHub repo
+        uses:  actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth:  0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git user
         run: |
           git config user.name "HF Sync Bot"
-          git config user.email "hf-sync-bot@users.noreply.github.com"
+          git config user. email "hf-sync-bot@users.noreply.github.com"
 
       - name: Clone Hugging Face Space repo (public)
         run: |
@@ -38,9 +39,9 @@ jobs:
         run: |
           set -e
 
-          # Remove everything except .git and .github (keeps workflow file)
+          # Remove everything except . git and .github (keeps workflow file)
           find . -mindepth 1 -maxdepth 1 \
-            ! -name ".git" \
+            !  -name ".git" \
             ! -name ".github" \
             -exec rm -rf {} +
 
@@ -62,4 +63,4 @@ jobs:
           fi
 
           git commit -m "Auto-sync from Hugging Face Space"
-          git push origin space-sync
+          git push -u origin space-sync
