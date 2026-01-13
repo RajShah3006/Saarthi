@@ -77,7 +77,7 @@ class LLMClient:
         self.has_api = False
         logger.warning("LLM client falling back to demo mode")
     
-    @retry_with_backoff(max_retries=3, base_delay=1.0)
+    @retry_with_backoff(max_retries=3, base_delay=2.0)  # Increased base delay
     def generate(self, prompt: str, system_prompt: str = "") -> str:
         """Generate response with retries"""
         if not self.has_api:
@@ -97,8 +97,21 @@ class LLMClient:
                 return response.text
                 
         except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
-            raise
+            error_str = str(e).lower()
+            
+            # Don't retry on certain errors - raise immediately
+            if "503" in error_str or "overloaded" in error_str:
+                logger.warning(f"Gemini API overloaded: {e}")
+                raise  # Will be caught by retry decorator
+            elif "429" in error_str or "quota" in error_str:
+                logger.warning(f"Gemini API rate limited: {e}")
+                raise  # Will be caught by retry decorator
+            elif "400" in error_str or "invalid" in error_str:
+                logger.error(f"Gemini API invalid request: {e}")
+                raise  # Don't retry invalid requests
+            else:
+                logger.error(f"LLM generation failed: {e}")
+                raise
     
     def _demo_response(self, prompt: str) -> str:
         """Demo response when no API available"""

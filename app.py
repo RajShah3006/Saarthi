@@ -13,6 +13,7 @@ from controllers import Controllers
 from ui.layout import create_ui_layout
 from ui.styles import get_css
 
+from services.timeline_generator import detect_timeline_mode, get_mode_info, TimelineMode, TimelineContext
 from utils.dashboard_renderer import render_program_cards, render_checklist, render_timeline
 from services.submissions_store import SubmissionStore
 from services.email_builder import build_email_from_submission
@@ -82,6 +83,77 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             dl = date(today.year + 1, 1, 15)
         return dl
 
+    def on_mode_inputs_change(confidence, academic_status, average):
+        """Update mode detection display and show/hide conditional inputs"""
+        
+        # Build minimal context for detection
+        ctx = TimelineContext(
+            current_average=float(average) if average else 80,
+            academic_status={
+                "I'm behind": "behind",
+                "I'm on track": "on-track", 
+                "I'm ahead": "ahead"
+            }.get(academic_status, "on-track"),
+            confidence_level=int(confidence) if confidence else 3,
+        )
+        
+        mode = detect_timeline_mode(ctx)
+        mode_info = get_mode_info(mode)
+        
+        mode_display = f"**Detected Mode:** {mode_info.emoji} {mode_info.label} — *{mode_info.description}*"
+        
+        # Show/hide conditional inputs
+        show_trajectory = (mode == TimelineMode.TRAJECTORY or ctx.confidence_level >= 4)
+        show_catchup = (mode == TimelineMode.CATCHUP)
+        
+        return (
+            gr.update(value=mode_display),
+            gr.update(visible=show_trajectory),
+            gr.update(visible=show_catchup),
+        )
+
+    student["confidence_slider"].change(
+        fn=on_mode_inputs_change,
+        inputs=[
+            student["confidence_slider"],
+            student["academic_status"],
+            student["average_input"],
+        ],
+        outputs=[
+            student["detected_mode"],
+            student["trajectory_inputs"],
+            student["catchup_inputs"],
+        ],
+    )
+
+    student["academic_status"].change(
+        fn=on_mode_inputs_change,
+        inputs=[
+            student["confidence_slider"],
+            student["academic_status"],
+            student["average_input"],
+        ],
+        outputs=[
+            student["detected_mode"],
+            student["trajectory_inputs"],
+            student["catchup_inputs"],
+        ],
+    )
+    
+    student["average_input"].change(
+        fn=on_mode_inputs_change,
+        inputs=[
+            student["confidence_slider"],
+            student["academic_status"],
+            student["average_input"],
+        ],
+        outputs=[
+            student["detected_mode"],
+            student["trajectory_inputs"],
+            student["catchup_inputs"],
+        ],
+    )
+    
     def build_fallback_timeline() -> List[Dict[str, Any]]:
         today = date.today()
         dl = ouac_deadline()
@@ -477,7 +549,10 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         tags, details,
         subjects, extracurriculars, preferences,
         wants_email, student_email,
-        sess_id, student_name
+        sess_id, student_name,
+        academic_status, confidence_level,
+        target_programs_str, target_universities_str,
+        missing_prereqs, recovery_timeline
     ):
         tags = tags or []
         details = (details or "").strip()
@@ -524,12 +599,27 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
         })
         resume_code = f"{created['id']}:{created['resume_token']}"
         note = f"**Resume code:** `{resume_code}`"
-    
+
+        # Build timeline context
+        timeline_context = {
+            "academic_status": {
+                "I'm behind": "behind",
+                "I'm on track": "on-track",
+                "I'm ahead": "ahead"
+            }.get(academic_status, "on-track"),
+            "confidence_level": int(confidence_level) if confidence_level else 3,
+            "target_programs": [p.strip() for p in (target_programs_str or "").split(",") if p.strip()],
+            "target_universities": [u.strip() for u in (target_universities_str or "").split(",") if u.strip()],
+            "missing_prereqs": missing_prereqs or [],
+            "recovery_timeline": recovery_timeline or "next semester",
+        }
+        
         # ═══════════════════════════════════════════════════════════════════
         # ✅ ALWAYS generate and save roadmap (even if wants_email is True)
         # ═══════════════════════════════════════════════════════════════════
         plan_raw = controllers.handle_generate_roadmap(
-            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id
+            subjects, interests_str, extracurriculars, average, grade, location, preferences, sess_id,
+            timeline_context=timeline_context
         )
         plan = safe_plan_dict(plan_raw)
     
@@ -544,6 +634,11 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             "avg": average,
             "subjects": ", ".join((subjects or [])[:6]),
         }
+
+        profile["mode"] = plan.get("mode", "")
+        profile["mode_info"] = plan.get("mode_info", {})
+        
+        timeline_html = render_timeline(profile, timeline_events)
     
         # ✅ Save generated plan to database (always)
         save_generated_plan_compat(created["id"], full_md, programs, timeline_events, projects)
@@ -671,6 +766,12 @@ def wire_events(components: dict, controllers: Controllers, config: Config):
             student["student_email"],
             session_state,
             name_state,
+            student["academic_status"],
+            student["confidence_slider"],
+            student["target_programs_input"],
+            student["target_universities_input"],
+            student["missing_prereqs_input"],
+            student["recovery_timeline_input"],
         ],
         outputs=[
             student["wizard_error"],

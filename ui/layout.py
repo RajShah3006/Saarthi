@@ -112,6 +112,69 @@ def create_ui_layout(config: Config) -> dict:
 
                 interest_hint = gr.Markdown("", elem_classes="hint-text")
 
+                # In create_ui_layout(), inside step1, after interest_hint:
+
+                gr.Markdown("#### Your Academic Journey")
+                
+                with gr.Row():
+                    academic_status = gr.Radio(
+                        choices=["I'm behind", "I'm on track", "I'm ahead"],
+                        value="I'm on track",
+                        label="Where are you academically?",
+                        elem_classes=["status-radio"]
+                    )
+                    confidence_slider = gr.Slider(
+                        minimum=1,
+                        maximum=5,
+                        value=3,
+                        step=1,
+                        label="How confident about your career direction?",
+                        info="1 = Still exploring • 5 = I know exactly what I want"
+                    )
+                
+                detected_mode = gr.Markdown(
+                    value="**Detected Mode:** 🔍 Exploration Mode — *Keeping doors open while you figure things out.*",
+                    elem_classes=["mode-display"]
+                )
+                
+                # Trajectory mode inputs (shown when confidence >= 4)
+                with gr.Group(visible=False) as trajectory_inputs:
+                    gr.Markdown("##### 🎯 Target Programs (Optional)")
+                    target_programs_input = gr.Textbox(
+                        label="Target Programs",
+                        placeholder="e.g., Computer Science, Mechanical Engineering",
+                        elem_classes="glass-input",
+                        info="Comma-separated list of programs you're aiming for"
+                    )
+                    target_universities_input = gr.Textbox(
+                        label="Target Universities",
+                        placeholder="e.g., University of Waterloo, U of T",
+                        elem_classes="glass-input",
+                        info="Comma-separated list of universities"
+                    )
+                
+                # Catch-up mode inputs (shown when behind or low average)
+                with gr.Group(visible=False) as catchup_inputs:
+                    gr.Markdown("##### 🚀 Recovery Planning")
+                    missing_prereqs_input = gr.CheckboxGroup(
+                        choices=[
+                            "English (ENG4U)",
+                            "Advanced Functions (MHF4U)",
+                            "Calculus & Vectors (MCV4U)",
+                            "Physics (SPH4U)",
+                            "Chemistry (SCH4U)",
+                            "Biology (SBI4U)",
+                            "Data Management (MDM4U)",
+                        ],
+                        label="Missing or At-Risk Prerequisites",
+                        info="Check any courses you've failed, dropped, or are struggling with"
+                    )
+                    recovery_timeline_input = gr.Radio(
+                        choices=["ASAP (this semester)", "Next semester", "Summer school", "Next year"],
+                        value="Next semester",
+                        label="When can you recover these courses?"
+                    )
+                
                 gr.Markdown("#### Delivery")
                 wants_email = gr.Checkbox(label="Email me the results (requires admin approval)", value=False)
                 student_email = gr.Textbox(
@@ -305,6 +368,17 @@ def create_ui_layout(config: Config) -> dict:
 
             "extracurriculars_input": extracurriculars_input,
             "preferences_input": preferences_input,
+
+            # Add to the "student" section of the return dict:
+            "academic_status": academic_status,
+            "confidence_slider": confidence_slider,
+            "detected_mode": detected_mode,
+            "trajectory_inputs": trajectory_inputs,
+            "target_programs_input": target_programs_input,
+            "target_universities_input": target_universities_input,
+            "catchup_inputs": catchup_inputs,
+            "missing_prereqs_input": missing_prereqs_input,
+            "recovery_timeline_input": recovery_timeline_input,
 
             "review_box": review_box,
             "loading_indicator": loading_indicator,

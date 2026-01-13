@@ -2,7 +2,7 @@
 
 import logging
 import traceback
-from typing import Tuple, Any, Dict, List
+from typing import Tuple, Any, Dict, List, Optional
 
 import gradio as gr
 
@@ -77,6 +77,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
         location: str,
         preferences: str,
         session_id: str,
+        timeline_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Returns a plan dict:
@@ -127,7 +128,7 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 preferences=Validators.sanitize_text(preferences, self.config.MAX_INTERESTS_LENGTH),
             )
 
-            result = self.roadmap_service.generate(profile, session)
+            result = self.roadmap_service.generate(profile, session, timeline_context)
             if not result.ok:
                 return {
                     "md": f"❌ **Error**\n\n{result.message}\n\n*Error ID: {result.error_id}*",
@@ -168,6 +169,11 @@ Fill in your profile below and click **Generate Roadmap** to get personalized un
                 "programs": ui_programs,
                 "timeline_events": timeline_events,
                 "projects": projects,
+                "mode": (result.data or {}).get("mode", "exploration"),
+                "mode_info": (result.data or {}).get("mode_info", {}),
+                "plan_strength": (result.data or {}).get("plan_strength", 0),
+                "quick_wins": (result.data or {}).get("quick_wins", []),
+                "improvements": (result.data or {}).get("improvements", []),
             }
 
         except Exception as e:

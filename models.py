@@ -133,6 +133,66 @@ class StudentProfile:
 
 
 @dataclass
+class TimelineProfile:
+    """Extended profile for timeline mode detection"""
+    # Core (from StudentProfile)
+    name: str = "Student"
+    grade: str = "Grade 12"
+    average: float = 80.0
+    interests: str = ""
+    subjects: List[str] = field(default_factory=list)
+    extracurriculars: str = ""
+    location: str = ""
+    preferences: str = ""
+    
+    # Mode detection
+    academic_status: str = "on-track"  # behind | on-track | ahead
+    confidence_level: int = 3  # 1-5 scale
+    
+    # Trajectory mode
+    target_programs: List[str] = field(default_factory=list)
+    target_universities: List[str] = field(default_factory=list)
+    
+    # Catch-up mode
+    missing_prereqs: List[str] = field(default_factory=list)
+    recovery_timeline: str = "next semester"
+    
+    @classmethod
+    def from_student_profile(cls, profile: 'StudentProfile', **kwargs) -> 'TimelineProfile':
+        """Create TimelineProfile from StudentProfile with additional fields"""
+        return cls(
+            name=profile.name,
+            grade=profile.grade,
+            average=profile.average,
+            interests=profile.interests,
+            subjects=profile.subjects,
+            extracurriculars=profile.extracurriculars,
+            location=profile.location,
+            preferences=profile.preferences,
+            **kwargs
+        )
+    
+    def to_context(self) -> 'TimelineContext':
+        """Convert to TimelineContext for generator"""
+        from services.timeline_generator import TimelineContext
+        return TimelineContext(
+            grade=self.grade,
+            current_average=self.average,
+            interests=self.interests,
+            subjects=self.subjects,
+            extracurriculars=self.extracurriculars,
+            location=self.location,
+            preferences=self.preferences,
+            academic_status=self.academic_status,
+            confidence_level=self.confidence_level,
+            target_programs=self.target_programs,
+            target_universities=self.target_universities,
+            missing_prereqs=self.missing_prereqs,
+            recovery_timeline=self.recovery_timeline,
+        )
+
+
+@dataclass
 class Session:
     """User session (in-memory only, no persistence)"""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
