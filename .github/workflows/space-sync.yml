@@ -21,8 +21,8 @@ jobs:
 
       - name: Configure git user
         run: |
-          git config user.name "HF Sync Bot"
-          git config user. email "hf-sync-bot@users.noreply.github.com"
+          git config --global user.name "HF Sync Bot"
+          git config --global user. email "hf-sync-bot@users.noreply.github.com"
 
       - name: Clone Hugging Face Space repo (public)
         run: |
