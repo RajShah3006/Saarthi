@@ -96,85 +96,80 @@
 
 ---
 
-## 🧠 Core Algorithms
+## 🧠 Core Algorithms & AI Concepts
+
+### Key Technical Terms
+
+| Term | Description |
+|------|-------------|
+| **RAG (Retrieval-Augmented Generation)** | AI architecture that retrieves relevant documents before generating responses, reducing hallucinations by grounding LLM output in real data |
+| **Vector Embeddings** | 768-dimensional numerical representations of text that capture semantic meaning, enabling similarity comparisons |
+| **Cosine Similarity** | Mathematical measure of similarity between two vectors, calculated as the dot product of normalized vectors |
+| **Semantic Search** | Search method that understands meaning rather than just keywords, finding related content even with different wording |
+| **LLM (Large Language Model)** | AI model (Google Gemini) used for natural language understanding and generation |
+| **Context Window** | The text provided to the LLM containing retrieved documents and user profile for generating responses |
+| **Prompt Engineering** | Designing system prompts and user prompts to guide LLM behavior and output format |
+| **Sigmoid Function** | S-shaped mathematical function used to convert grade differences into probability scores |
+| **Weighted Linear Combination** | Scoring method that combines multiple factors with configurable weights |
+| **Fuzzy Matching** | String comparison technique that finds similar text even with typos or variations |
+| **Top-K Retrieval** | Selecting the K most relevant items from a larger corpus |
+| **Exponential Backoff** | Retry strategy that increases wait time between attempts (1s, 2s, 4s...) |
+| **TTL (Time To Live)** | Session expiration mechanism based on elapsed time |
+| **Graceful Degradation** | System design that provides reduced functionality rather than failing completely |
 
 ### Multi-Factor Program Scoring
 
-The `ProgramSearchService` class implements a **weighted linear combination** scoring system:
+The search engine implements a **weighted linear combination** of five scoring factors:
 
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| **Relevance Score** | 35% | `_calculate_relevance_score()` - Keyword matching against `FIELD_KEYWORDS` dictionary with **quadratic suppression** for irrelevant programs |
-| **Embedding Similarity** | 25% | `_calculate_embedding_scores()` - Cosine similarity via **normalized dot product** against embedding matrix |
-| **Grade Fit** | 20% | `_calculate_grade_score()` - **Sigmoid transformation** (`_sigmoid()` with k=0.25) of grade delta |
-| **Prerequisites** | 15% | `_calculate_prerequisite_score()` - Course pattern matching for Ontario curriculum codes (MCV4U, MHF4U, etc.) |
-| **Location** | 5% | `_calculate_location_score()` - GTA region detection and Ontario-wide matching |
-
-**Key Technical Terms:**
-- **FIELD_KEYWORDS**: Dictionary mapping 25+ academic fields (robotics, AI, business, medicine, etc.) to related keywords
-- **GARBAGE_STRINGS**: List of common scraping artifacts removed via `_clean_prerequisites()`
-- **Quadratic Suppression**: Programs with relevance < 30% receive `score *= relevance` penalty
-- **Competitive Bonus**: Programs marked competitive where student qualifies get `score * 1.1`
-
-### Semantic Search via Embeddings
-
-The system uses **retrieval_query** task type for query embedding and **retrieval_document** for corpus:
-
-- **Model:** `models/text-embedding-004` (Google Gemini)
-- **Embedding Matrix:** NumPy array of shape `(num_programs, 768)` built at startup
-- **Normalization:** Query and program vectors normalized to unit length before dot product
-- **Similarity Formula:** `max(0, dot(query_norm, prog_norm))` with final normalization
-
-### Grade Scoring Algorithm
-
-The `_parse_admission_average()` method handles various admission formats:
-
-| Input Pattern | Parsing Logic |
-|--------------|---------------|
-| "Below 75%" / "Under 75%" | Extract number, subtract 5 (easy admission) |
-| "85-90%" (range) | Calculate average of low and high |
-| "85%" (single) | Direct extraction |
-| "Competitive" / "High" | Default to 90% |
-| "Mid 80s" / "Low 80s" | Mapped to 85% / 80% |
-
-**Assessment Labels:**
-| Grade Delta | Assessment |
-|-------------|------------|
-| ≥ +10% | Safe 🟢 |
-| ≥ +5% | Good 🟢 |
-| ≥ 0% | Target 🟡 |
-| ≥ -5% | Reach 🟠 |
-| < -5% | Long Shot 🔴 |
-
-### Typo Tolerance & Field Detection
-
-- **FIELD_KEYWORDS Dictionary:** Maps fields like "robotics" → ["robotics", "mechatronics", "automation", "mechanical", "electrical", "control", "embedded"]
-- **Fuzzy Matching:** SequenceMatcher with 0.75 threshold
-- **Interest Word Bonus:** Direct matches of interest words in program name add +0.5 to score
+| Factor | Weight | AI/ML Technique |
+|--------|--------|-----------------|
+| **Relevance** | 35% | Keyword matching with **quadratic suppression** for irrelevant results |
+| **Embedding Similarity** | 25% | **Cosine similarity** between query and program **vector embeddings** |
+| **Grade Fit** | 20% | **Sigmoid transformation** of admission average delta |
+| **Prerequisites** | 15% | Pattern matching for Ontario course codes |
+| **Location** | 5% | Geographic region detection |
 
 ### RAG Pipeline (Retrieval-Augmented Generation)
 
-The `RoadmapService` orchestrates the RAG pipeline:
+The system implements a complete **RAG architecture**:
 
-1. **Retrieval:** `search_with_profile()` returns top-K programs with breakdown dictionaries
-2. **Context Assembly:** `PromptTemplates.roadmap_prompt()` formats profile + programs
-3. **System Prompt:** `roadmap_system_prompt()` sets rules (no fabrication, verify on link, etc.)
-4. **Generation:** `LLMClient.generate()` with `@retry_with_backoff` decorator (3 attempts, exponential delay)
-5. **Formatting:** `_format_output()` generates styled markdown with match icons
+1. **Retrieval Phase:** **Semantic search** finds top-10 programs using **vector embeddings** and **cosine similarity**
+2. **Augmentation Phase:** Retrieved programs are formatted into the **context window** along with student profile
+3. **Generation Phase:** **LLM** generates personalized analysis using only the provided context (no hallucination)
+4. **Post-processing:** Output is formatted with match scores, icons, and structured markdown
 
-### LLM Client Architecture
+### Semantic Search via Vector Embeddings
 
-The `LLMClient` class implements **graceful degradation**:
+- **Embedding Model:** Google Gemini text-embedding-004 produces **768-dimensional vectors**
+- **Corpus Embeddings:** All 2000+ programs are pre-embedded and stored in a **vector database** (JSON)
+- **Query Embedding:** Student interests are converted to vectors at runtime using **retrieval_query** task type
+- **Similarity Calculation:** **Cosine similarity** computed via **normalized dot product**
+- **Ranking:** Programs sorted by similarity score with **top-K retrieval**
 
-- **API Detection:** Tries `google-genai` (new API) first, falls back to `google-generativeai` (legacy)
-- **Retry Logic:** `@retry_with_backoff(max_retries=3, base_delay=1.0)` decorator with exponential backoff
-- **Demo Mode:** Static responses when `GEMINI_API_KEY` not configured
+### Grade Fit Scoring
 
-### Timeline Generation
+Uses **sigmoid function** to convert grade differences into probability-based assessments:
 
-- Anchors all milestones to **OUAC equal consideration deadline** (January 15)
-- Generates date-specific action items working backwards from deadline
-- Interest-specific project checklists (robotics portfolio, CS app, research brief)
+| Grade Delta | Assessment | Interpretation |
+|-------------|------------|----------------|
+| ≥ +10% | Safe 🟢 | High admission probability |
+| ≥ +5% | Good 🟢 | Strong chances |
+| ≥ 0% | Target 🟡 | Competitive fit |
+| ≥ -5% | Reach 🟠 | Aspirational choice |
+| < -5% | Long Shot 🔴 | Low probability |
+
+### LLM Integration
+
+- **Model:** Google Gemini (gemini-2.5-flash)
+- **Prompt Engineering:** Structured system prompts prevent hallucination and enforce output format
+- **Retry Strategy:** **Exponential backoff** (3 attempts with 1s, 2s, 4s delays)
+- **Graceful Degradation:** Demo mode with static responses when API unavailable
+
+### Fuzzy Matching & Typo Tolerance
+
+- **Fuzzy String Matching:** SequenceMatcher algorithm with 0.75 similarity threshold
+- **Field Keywords:** 25+ academic fields mapped to related terms for **semantic expansion**
+- **Typo Correction:** Common misspellings automatically corrected before search
 
 ---
 
@@ -219,51 +214,41 @@ Saarthi/
 ## 🔧 Services & Modules
 
 ### LLM Client (`services/llm_client.py`)
-- **Class:** `LLMClient` with `@retry_with_backoff` decorator
-- **API Detection:** Auto-detects `google-genai` vs `google-generativeai`
-- **Retry Logic:** Exponential backoff (base_delay=1.0, max_retries=3)
-- **Fallback:** `_demo_response()` provides static responses in demo mode
+- Wrapper for Google Gemini API with **exponential backoff** retry logic
+- Automatic API version detection with **graceful degradation**
+- Demo mode fallback when API key not configured
 
 ### Program Search (`services/program_search.py`)
-- **Class:** `ProgramSearchService`
-- **Data Structures:**
-  - `FIELD_KEYWORDS`: Dict mapping 25+ fields to keyword lists
-  - `GARBAGE_STRINGS`: List of scraping artifacts to remove
-  - `embedding_matrix`: NumPy array shape `(n_programs, 768)`
-- **Key Methods:**
-  - `_calculate_relevance_score()`: Keyword matching with field detection
-  - `_calculate_grade_score()`: Sigmoid transformation + assessment labels
-  - `_calculate_prerequisite_score()`: Ontario course pattern matching
-  - `_calculate_embedding_scores()`: Vectorized cosine similarity
-  - `_calculate_final_score()`: Weighted combination with filtering
+- **Semantic search** engine using **vector embeddings** and **cosine similarity**
+- **Multi-factor scoring** with **weighted linear combination**
+- **Fuzzy matching** for typo tolerance
+- **Quadratic suppression** for irrelevant results filtering
 
 ### Roadmap Service (`services/roadmap.py`)
-- **Class:** `RoadmapService`
-- **Orchestration:** search → context assembly → LLM generation → formatting
-- **Output Format:** Styled markdown with match icons (🌟, ✅, 🔶, ⚪)
-- **Timeline:** OUAC-anchored milestones with date-specific actions
+- **RAG pipeline** orchestrator: retrieval → augmentation → generation
+- **Prompt engineering** for structured LLM output
+- Timeline generation anchored to OUAC deadlines
 
 ### Domain Models (`models.py`)
-- **Program:** Dataclass with `embedding: List[float]`, `search_text`, `co_op_available`
-- **StudentProfile:** Validated profile with `to_context_string()` for prompts
-- **Session:** UUID-based with TTL validation via `is_valid(timeout_minutes)`
-- **ServiceResult:** Result wrapper with `ok`, `message`, `data`, `error_id`
+- **Program:** Contains **768-dim embedding vector** and metadata
+- **StudentProfile:** Validated profile for **context window** injection
+- **Session:** **TTL-based** session management
+- **ServiceResult:** Standard response wrapper pattern
 
 ### Prompt Templates (`prompts/templates.py`)
-- **Class:** `PromptTemplates`
-- **System Prompts:** `roadmap_system_prompt()`, `followup_system_prompt()`
-- **Rules:** No fabrication, verify on link, 6-12 bullets max
-- **Formatting:** `_format_programs()` for RAG context injection
+- **System prompts** for **prompt engineering** (rules, format constraints)
+- **Context assembly** templates for **RAG augmentation**
+- Anti-hallucination rules (verify on link, no fabrication)
 
 ### Submissions Store (`services/submissions_store.py`)
-- SQLite database with auto-migration for schema changes
-- Tables: `submissions` (profile + outputs), `submission_actions` (audit log)
+- SQLite persistence for student submissions
 - Status workflow: NEW → GENERATED → IN_REVIEW → SENT
+- Audit trail for compliance
 
 ### GitHub Issues (`services/github_issues.py`)
-- Creates tracking issues for email requests (public-repo safe, no PII)
+- Issue tracking integration for email workflow
 - Round-robin assignee selection
-- Status label management and issue closing
+- Status label automation
 
 ---
 
