@@ -2,8 +2,6 @@ name: Sync Hugging Face Space -> space-sync
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 * * * *"   # every hour (change if you want)
 
 permissions:
   contents: write
